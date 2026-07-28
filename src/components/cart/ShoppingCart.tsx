@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { ShoppingBag, X, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { useCartStore } from '@/lib/hooks/use-cart-store';
 import { Button } from '@/components/ui/Button';
 import { formatUsdc } from '@/lib/utils';
@@ -14,16 +15,9 @@ interface ShoppingCartProps {
 
 export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
   const { items, removeItem, clearCart, getTotalPrice } = useCartStore();
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   const totalPrice = getTotalPrice();
   const itemCount = items.length;
-
-  const handleCheckout = async () => {
-    setIsCheckingOut(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsCheckingOut(false);
-  };
 
   if (!isOpen) return null;
 
@@ -139,18 +133,17 @@ export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
             </div>
 
             {/* Action Buttons */}
-            <Button
-              fullWidth
-              variant="primary"
-              size="lg"
-              isLoading={isCheckingOut}
-              loadingText="Processing..."
-              onClick={handleCheckout}
-              icon={<ArrowRight className="w-4 h-4" />}
-              iconPosition="right"
-            >
-              Proceed to Checkout
-            </Button>
+            <Link href="/checkout">
+              <Button
+                fullWidth
+                variant="primary"
+                size="lg"
+                icon={<ArrowRight className="w-4 h-4" />}
+                iconPosition="right"
+              >
+                Proceed to Checkout
+              </Button>
+            </Link>
 
             <button
               onClick={clearCart}
