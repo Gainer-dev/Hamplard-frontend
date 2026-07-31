@@ -1,5 +1,9 @@
 'use client';
 
+import React from 'react';
+import Link from 'next/link';
+import { ShoppingBag, X, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import React, { useState} from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -247,6 +251,17 @@ function ShoppingCartContent({ isOpen = true, onClose }: ShoppingCartProps) {
             </div>
 
             {/* Action Buttons */}
+            <Link href="/checkout">
+              <Button
+                fullWidth
+                variant="primary"
+                size="lg"
+                icon={<ArrowRight className="w-4 h-4" />}
+                iconPosition="right"
+              >
+                Proceed to Checkout
+              </Button>
+            </Link>
             <Button
               fullWidth
               variant="primary"
