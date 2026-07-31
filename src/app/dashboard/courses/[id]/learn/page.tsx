@@ -1,237 +1,316 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+
 import {
-  CheckCircle2, Circle, ChevronDown, ChevronRight,
-  Download, Loader2, ArrowLeft, MessageSquare, FileText,
-} from 'lucide-react';
-import Link from 'next/link';
-import { coursesApi, enrollmentsApi, lessonsApi } from '@/lib/api/services';
-import { formatDuration, cn } from '@/lib/utils';
-import type { Course, Enrollment, Lesson, LessonProgress } from '@/types';
-import NotesPanel from '@/components/learn/NotesPanel';
+  ArrowLeft,
+  Award,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Download,
+  FileText,
+  Loader2,
+  MessageSquare,
+  Package,
+  ChevronLeft,
+} from "lucide-react";
 
-type SidebarTab = 'lessons' | 'notes' | 'qa';
-import CourseCompletionModal from '@/components/learn/CourseCompletionModal';
-import type { Course, Enrollment, Lesson, LessonProgress } from '@/types';
+import { cn, formatDuration } from "@/lib/utils";
+
+import { coursesApi, enrollmentsApi, lessonsApi } from "@/lib/api/services";
+
+import type { Course, Enrollment, Lesson } from "@/types";
+
+import NotesPanel from "@/components/learn/NotesPanel";
+import CourseCompletionModal from "@/components/learn/CourseCompletionModal";
+import { VideoPlayer } from "@/components/learn/VideoPlayer";
+
+type RightTab = "notes" | "qa" | "resources";
 
 export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
 
-  const [course,      setCourse]      = useState<Course | null>(null);
-  const [enrollment,  setEnrollment]  = useState<Enrollment | null>(null);
-  const [activeLesson,setActiveLesson]= useState<Lesson | null>(null);
-  const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
-  const [loading,     setLoading]     = useState(true);
-  const [marking,     setMarking]     = useState(false);
-  const [sidebarTab,  setSidebarTab]  = useState<SidebarTab>('lessons');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const progressRef = useRef<NodeJS.Timeout | null>(null);
+  const [course, setCourse] = useState<Course | null>(null);
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const [loading, setLoading] = useState(true);
+
+  const [marking, setMarking] = useState(false);
+
+  const [rightTab, setRightTab] = useState<RightTab>("notes");
+
   const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const progressRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [showSidebar, setShowSidebar] = useState(false);
+
   const previousCompletedCountRef = useRef<number | null>(null);
-  const hasInitializedCompletionStateRef = useRef(false);
+
+  const initializedCompletion = useRef(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      coursesApi.get(id),
-      enrollmentsApi.get(id),
-    ]).then(([c, e]) => {
-      setCourse(c);
-      setEnrollment(e);
-      // Open first module by default
-      if (c.modules?.[0]) setExpanded({ [c.modules[0].id]: true });
-      // Start from first incomplete lesson
-      const allLessons = c.modules?.flatMap((m) => m.lessons) ?? [];
-      const completedIds = new Set(
-        e.lessonProgress?.filter((p) => p.completed).map((p) => p.lessonId),
-      );
-      const first = allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
-      if (first) setActiveLesson(first);
-    })
-    .catch(console.error)
-    .finally(() => setLoading(false));
+    Promise.all([coursesApi.get(id), enrollmentsApi.get(id)])
+      .then(([courseData, enrollmentData]) => {
+        setCourse(courseData);
+        setEnrollment(enrollmentData);
 
-    return () => { if (progressRef.current) clearInterval(progressRef.current); };
+        if (courseData.modules?.length) {
+          setExpanded({
+            [courseData.modules[0].id]: true,
+          });
+        }
+
+        const lessons = courseData.modules?.flatMap((m) => m.lessons) ?? [];
+
+        const completedIds = new Set(
+          enrollmentData.lessonProgress
+            ?.filter((p) => p.completed)
+            .map((p) => p.lessonId),
+        );
+
+        const firstLesson =
+          lessons.find((l) => !completedIds.has(l.id)) ?? lessons[0];
+
+        if (firstLesson) setActiveLesson(firstLesson);
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => {
-    if (!course || !enrollment) return;
-
-    const totalLessons = course.modules?.flatMap((m) => m.lessons).length ?? 0;
-    const completedCount = enrollment.lessonProgress?.filter((p) => p.completed).length ?? 0;
-    const isComplete = totalLessons > 0 && completedCount >= totalLessons;
-    const previouslyIncomplete = previousCompletedCountRef.current === null || previousCompletedCountRef.current < totalLessons;
-    const newlyCompleted = hasInitializedCompletionStateRef.current && previouslyIncomplete && isComplete;
-
-    previousCompletedCountRef.current = completedCount;
-    hasInitializedCompletionStateRef.current = true;
-
-    if (!isComplete) {
-      setShowCompletionModal(false);
-      return;
-    }
-
-    const storageKey = `course-completion:${course.id}`;
-    const hasSeenModal = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === 'true';
-
-    if (newlyCompleted && !hasSeenModal) {
-      setShowCompletionModal(true);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(storageKey, 'true');
-      }
-    } else {
-      setShowCompletionModal(false);
-    }
-  }, [course, enrollment]);
-
   const isLessonCompleted = (lessonId: string) =>
-    enrollment?.lessonProgress?.some((p) => p.lessonId === lessonId && p.completed) ?? false;
+    enrollment?.lessonProgress?.some(
+      (p) => p.lessonId === lessonId && p.completed,
+    ) ?? false;
+
+  const allLessons = useMemo(
+    () => course?.modules?.flatMap((m) => m.lessons) ?? [],
+    [course],
+  );
+
+  const currentIndex = allLessons.findIndex((l) => l.id === activeLesson?.id);
+
+  const previousLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
+
+  const nextLesson =
+    currentIndex >= 0 && currentIndex < allLessons.length - 1
+      ? allLessons[currentIndex + 1]
+      : null;
+
+  const totalLessons = allLessons.length;
+
+  const completedCount =
+    enrollment?.lessonProgress?.filter((p) => p.completed).length ?? 0;
+
+  const progress =
+    totalLessons === 0 ? 0 : Math.round((completedCount / totalLessons) * 100);
 
   const handleMarkComplete = async () => {
     if (!activeLesson || !enrollment || marking) return;
+
     setMarking(true);
+
     try {
       await lessonsApi.markComplete(activeLesson.id, enrollment.id);
-      // Re-fetch enrollment to update progress
+
       const updated = await enrollmentsApi.get(id);
+
       setEnrollment(updated);
     } finally {
       setMarking(false);
     }
   };
 
-  const totalLessons   = course?.modules?.flatMap((m) => m.lessons).length ?? 0;
-  const completedCount = enrollment?.lessonProgress?.filter((p) => p.completed).length ?? 0;
-  const progress       = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+  useEffect(() => {
+    if (!course || !enrollment) return;
 
-  const handleCloseCompletionModal = () => setShowCompletionModal(false);
+    const completed =
+      enrollment.lessonProgress?.filter((p) => p.completed).length ?? 0;
 
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <Loader2 className="w-6 h-6 text-saffron-500 animate-spin" />
-    </div>
-  );
+    const finished = completed >= totalLessons && totalLessons > 0;
 
-  if (!course) return <div className="text-center py-16 text-ink-500">Course not found.</div>;
+    const wasIncomplete =
+      previousCompletedCountRef.current === null ||
+      previousCompletedCountRef.current < totalLessons;
+
+    const newlyFinished =
+      initializedCompletion.current && wasIncomplete && finished;
+
+    previousCompletedCountRef.current = completed;
+
+    initializedCompletion.current = true;
+
+    if (!finished) {
+      setShowCompletionModal(false);
+      return;
+    }
+
+    const key = `course-completion:${course.id}`;
+
+    const seen =
+      typeof window !== "undefined" && localStorage.getItem(key) === "true";
+
+    if (newlyFinished && !seen) {
+      setShowCompletionModal(true);
+
+      localStorage.setItem(key, "true");
+    }
+  }, [course, enrollment, totalLessons]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-saffron-500" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return <div className="py-20 text-center">Course not found.</div>;
+  }
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      {/* Left sidebar – Lessons / Notes / Q&A tabs */}
-      <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0">
-        {/* Tab bar */}
-        <div className="flex border-b border-ink-100">
-          <button
-            onClick={() => setSidebarTab('lessons')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'lessons'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <Circle className="w-3.5 h-3.5" />
-            Lessons
-          </button>
-          <button
-            onClick={() => setSidebarTab('notes')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'notes'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Notes
-          </button>
-          <button
-            onClick={() => setSidebarTab('qa')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'qa'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Q&A
-          </button>
-        </div>
+    <>
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden bg-zinc-950">
+        {/* <div className="grid h-full lg:grid-cols-[320px_1fr_360px]"> */}
+        {/* LEFT SIDEBAR — COURSE CURRICULUM */}
+        <aside
+          className={cn(
+            "bg-zinc-900 border-zinc-800",
+            "w-full lg:w-80",
+            "lg:flex-shrink-0",
+            "border-b lg:border-b-0 lg:border-r",
+            showSidebar ? "block" : "hidden lg:block",
+          )}
+        >
+          {/* Header */}
 
-        {/* Tab content */}
-        {sidebarTab === 'lessons' && (
-          <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-ink-100">
-              <Link href={`/dashboard/courses/${id}`}
-                className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors">
-                <ArrowLeft className="w-3 h-3" />
-                Back to overview
-              </Link>
-              <h2 className="text-sm font-semibold text-ink-900 line-clamp-2">{course.title}</h2>
-              <div className="mt-2.5">
-                <div className="flex justify-between text-xs text-ink-400 mb-1">
-                  <span>{completedCount}/{totalLessons} lessons</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${progress}%` }} />
-                </div>
+          <div className="border-b border-zinc-800 p-5">
+            <Link
+              href={`/dashboard/courses/${id}`}
+              className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back to Course
+            </Link>
+
+            <h2 className="mt-4 text-lg font-semibold line-clamp-2">
+              {course.title}
+            </h2>
+
+            <div className="mt-5">
+              <div className="flex items-center justify-between text-xs text-zinc-400 mb-2">
+                <span>
+                  {completedCount}/{totalLessons} Lessons
+                </span>
+
+                <span>{progress}%</span>
+              </div>
+
+              <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+                <div
+                  className="h-full bg-saffron-500 transition-all"
+                  style={{
+                    width: `${progress}%`,
+                  }}
+                />
               </div>
             </div>
+          </div>
 
-            {/* Modules + lessons */}
-            <div className="flex-1 overflow-y-auto">
-              {course.modules?.map((module, mi) => (
-                <div key={module.id} className="border-b border-ink-50">
+          {/* Curriculum */}
+
+          <div className="flex-1 overflow-y-auto">
+            {course.modules?.map((module, moduleIndex) => {
+              const completedLessons = module.lessons.filter((lesson) =>
+                isLessonCompleted(lesson.id),
+              ).length;
+
+              return (
+                <div key={module.id} className="border-b border-zinc-900">
+                  {/* Module */}
+
                   <button
-                    onClick={() => setExpanded((p) => ({ ...p, [module.id]: !p[module.id] }))}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-ink-50 transition-colors"
+                    onClick={() =>
+                      setExpanded((prev) => ({
+                        ...prev,
+                        [module.id]: !prev[module.id],
+                      }))
+                    }
+                    className="flex w-full items-center justify-between px-5 py-4 hover:bg-zinc-900 transition"
                   >
-                    <div>
-                      <p className="text-xs font-semibold text-ink-700">
-                        Module {mi + 1}: {module.title}
-                      </p>
-                      <p className="text-[10px] text-ink-400 mt-0.5">
-                        {module.lessons.filter((l) => isLessonCompleted(l.id)).length}/
-                        {module.lessons.length} done
+                    <div className="text-left">
+                      <p className="font-medium">Module {moduleIndex + 1}</p>
+
+                      <p className="text-sm text-zinc-400">{module.title}</p>
+
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {completedLessons}/{module.lessons.length} completed
                       </p>
                     </div>
-                    {expanded[module.id]
-                      ? <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
-                      : <ChevronRight className="w-3.5 h-3.5 text-ink-400" />
-                    }
+
+                    {expanded[module.id] ? (
+                      <ChevronDown className="w-4 h-4 text-zinc-500" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-zinc-500" />
+                    )}
                   </button>
 
+                  {/* Lessons */}
+
                   {expanded[module.id] && (
-                    <div className="pb-1">
+                    <div>
                       {module.lessons.map((lesson) => {
-                        const done    = isLessonCompleted(lesson.id);
-                        const active  = activeLesson?.id === lesson.id;
+                        const completed = isLessonCompleted(lesson.id);
+
+                        const active = lesson.id === activeLesson?.id;
+
                         return (
                           <button
                             key={lesson.id}
                             onClick={() => setActiveLesson(lesson)}
                             className={cn(
-                              'w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors',
-                              active ? 'bg-saffron-50' : 'hover:bg-ink-50',
+                              "w-full flex items-start gap-3 px-5 py-3 text-left transition",
+
+                              active
+                                ? "bg-saffron-500/10 border-l-4 border-saffron-500"
+                                : "hover:bg-zinc-900",
                             )}
                           >
-                            {done
-                              ? <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
-                              : <Circle className={cn('w-4 h-4 flex-shrink-0 mt-0.5', active ? 'text-saffron-500' : 'text-ink-300')} />
-                            }
-                            <div className="min-w-0">
-                              <p className={cn(
-                                'text-xs leading-snug',
-                                active ? 'font-semibold text-saffron-700' : done ? 'text-ink-500' : 'text-ink-700',
-                              )}>
+                            {completed ? (
+                              <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                            ) : (
+                              <Circle
+                                className={cn(
+                                  "w-5 h-5 mt-0.5 shrink-0",
+
+                                  active ? "text-saffron-500" : "text-zinc-600",
+                                )}
+                              />
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className={cn(
+                                  "text-sm",
+
+                                  active
+                                    ? "font-semibold text-white"
+                                    : "text-zinc-300",
+                                )}
+                              >
                                 {lesson.title}
                               </p>
+
                               {lesson.videoDuration && (
-                                <p className="text-[10px] text-ink-400 mt-0.5">
+                                <p className="mt-1 text-xs text-zinc-500">
                                   {formatDuration(lesson.videoDuration)}
                                 </p>
                               )}
@@ -241,211 +320,376 @@ export default function LearnPage() {
                       })}
                     </div>
                   )}
-      {course && (
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+        {/* MAIN CONTENT */}
+        <main className="flex-1 flex-col bg-zinc-950 overflow-y-auto">
+          {/* Breadcrumb */}
+
+          <div className="border-b border-zinc-800 px-8 py-4">
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <Link
+                href="/dashboard/courses"
+                className="hover:text-white transition"
+              >
+                Courses
+              </Link>
+
+              <span>/</span>
+
+              <Link
+                href={`/dashboard/courses/${id}`}
+                className="hover:text-white transition"
+              >
+                {course.title}
+              </Link>
+
+              {activeLesson && (
+                <>
+                  <span>/</span>
+
+                  <span className="text-white truncate">
+                    {activeLesson.title}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {activeLesson ? (
+            <div className="mx-auto w-full max-w-7xl p-4 lg:p-8">
+              <div className="lg:hidden mb-4">
+                <button
+                  onClick={() => setShowSidebar(!showSidebar)}
+                  className="w-full rounded-lg bg-saffron-500 py-3 text-sm font-semibold text-white"
+                >
+                  {showSidebar ? "Hide Curriculum" : "Show Curriculum"}
+                </button>
+              </div>
+              {/* VIDEO PLAYER */}
+              {activeLesson.videoUrl && (
+                <VideoPlayer
+                  ref={videoRef}
+                  src={activeLesson.videoUrl}
+                  lessonId={activeLesson.id}
+                  enrollmentId={enrollment?.id}
+                  className="aspect-video w-full rounded-xl lg:rounded-2xl overflow-hidden shadow-2xl"
+                  onComplete={async () => {
+                    if (!isLessonCompleted(activeLesson.id) && enrollment) {
+                      await lessonsApi.markComplete(
+                        activeLesson.id,
+                        enrollment.id,
+                      );
+
+                      const updated = await enrollmentsApi.get(id);
+
+                      setEnrollment(updated);
+                    }
+                  }}
+                />
+              )}
+
+              <div className="lg:hidden mt-4">
+                <div className="grid grid-cols-3 rounded-lg overflow-hidden border border-zinc-800">
+                  <button
+                    onClick={() => setRightTab("notes")}
+                    className={cn(
+                      "py-3 text-sm",
+                      rightTab === "notes"
+                        ? "bg-saffron-500 text-white"
+                        : "bg-zinc-900 text-zinc-400",
+                    )}
+                  >
+                    Notes
+                  </button>
+
+                  <button
+                    onClick={() => setRightTab("qa")}
+                    className={cn(
+                      "py-3 text-sm",
+                      rightTab === "qa"
+                        ? "bg-saffron-500 text-white"
+                        : "bg-zinc-900 text-zinc-400",
+                    )}
+                  >
+                    Q&A
+                  </button>
+
+                  <button
+                    onClick={() => setRightTab("resources")}
+                    className={cn(
+                      "py-3 text-sm",
+                      rightTab === "resources"
+                        ? "bg-saffron-500 text-white"
+                        : "bg-zinc-900 text-zinc-400",
+                    )}
+                  >
+                    Files
+                  </button>
+                </div>
+              </div>
+
+              {/* LESSON INFO */}
+              <div className="mt-8 flex flex-col gap-6">
+                <div className="flex items-start justify-between gap-6">
+                  <div>
+                    <h1 className="text-3xl font-bold text-white">
+                      {activeLesson.title}
+                    </h1>
+
+                    {activeLesson.description && (
+                      <p className="mt-3 max-w-4xl text-zinc-400 leading-relaxed">
+                        {activeLesson.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {!isLessonCompleted(activeLesson.id) ? (
+                    <button
+                      onClick={handleMarkComplete}
+                      disabled={marking}
+                      className="rounded-lg bg-saffron-500 px-5 py-3 font-medium text-white transition hover:bg-saffron-600 disabled:opacity-50"
+                    >
+                      {marking ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5" />
+                          Mark Complete
+                        </div>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg bg-green-500/20 px-4 py-2 text-green-400">
+                      <CheckCircle2 className="h-5 w-5" />
+                      Completed
+                    </div>
+                  )}
+                </div>
+
+                {/* TEXT LESSON */}
+                {activeLesson.type === "TEXT" && activeLesson.content && (
+                  <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-8 prose prose-invert max-w-none">
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: activeLesson.content,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* DOWNLOAD RESOURCE */}
+                {activeLesson.resourceUrl && (
+                  <a
+                    href={activeLesson.resourceUrl}
+                    download
+                    className="inline-flex w-fit items-center gap-2 rounded-lg border border-zinc-700 px-4 py-3 text-white transition hover:bg-zinc-800"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download Lesson Resource
+                  </a>
+                )}
+
+                {/* NAVIGATION */}
+                <div className="mt-10 flex items-center justify-between border-t border-zinc-800 pt-8">
+                  {previousLesson ? (
+                    <button
+                      onClick={() => setActiveLesson(previousLesson)}
+                      className="rounded-lg border border-zinc-700 px-5 py-3 text-white transition hover:bg-zinc-800"
+                    >
+                      ← Previous Lesson
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+
+                  {nextLesson ? (
+                    <button
+                      onClick={() => setActiveLesson(nextLesson)}
+                      className="rounded-lg bg-saffron-500 px-5 py-3 font-medium text-white transition hover:bg-saffron-600"
+                    >
+                      Next Lesson →
+                    </button>
+                  ) : (
+                    <Link
+                      href="/dashboard/certificates"
+                      className="rounded-lg bg-green-600 px-5 py-3 font-medium text-white transition hover:bg-green-700"
+                    >
+                      Finish Course
+                    </Link>
+                  )}
+                </div>
+
+                {/* COURSE COMPLETE */}
+                {progress === 100 && !showCompletionModal && (
+                  <div className="rounded-2xl border border-green-700 bg-green-500/10 p-10 text-center">
+                    <Award className="mx-auto h-14 w-14 text-green-400" />
+
+                    <h2 className="mt-5 text-3xl font-bold text-white">
+                      Congratulations 🎉
+                    </h2>
+
+                    <p className="mt-3 text-zinc-400">
+                      You have successfully completed this course.
+                    </p>
+
+                    <Link
+                      href="/dashboard/certificates"
+                      className="mt-6 inline-flex rounded-lg bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700"
+                    >
+                      View Certificate
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-zinc-500">
+              Select a lesson to begin learning.
+            </div>
+          )}
+        </main>
+
+        {/* RIGHT SIDEBAR */}
+        <aside className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-zinc-800 bg-zinc-900 flex flex-col h-[420px] lg:h-auto border-l">
+          {/* Tabs */}
+
+          <div className="flex overflow-x-auto border-b border-zinc-800">
+            <button
+              onClick={() => setRightTab("notes")}
+              className={cn(
+                "flex-1 min-w-[120px] py-4 text-sm font-medium transition",
+                rightTab === "notes"
+                  ? "border-b-2 border-saffron-500 text-white"
+                  : "text-zinc-500 hover:text-white",
+              )}
+            >
+              Notes
+            </button>
+
+            <button
+              onClick={() => setRightTab("qa")}
+              className={cn(
+                "flex-1 min-w-[120px] py-4 text-sm font-medium transition",
+                rightTab === "qa"
+                  ? "border-b-2 border-saffron-500 text-white"
+                  : "text-zinc-500 hover:text-white",
+              )}
+            >
+              Q&A
+            </button>
+
+            <button
+              onClick={() => setRightTab("resources")}
+              className={cn(
+                "flex-1 min-w-[120px] py-4 text-sm font-medium transition",
+                rightTab === "resources"
+                  ? "border-b-2 border-saffron-500 text-white"
+                  : "text-zinc-500 hover:text-white",
+              )}
+            >
+              Resources
+            </button>
+          </div>
+
+          {/* Panel */}
+
+          <div className="flex-1 overflow-hidden">
+            {/* NOTES */}
+            {rightTab === "notes" && activeLesson && (
+              <NotesPanel
+                courseId={id}
+                lectureId={activeLesson.id}
+                videoRef={videoRef}
+              />
+            )}
+
+            {/* Q&A */}
+            {rightTab === "qa" && (
+              <div className="flex h-full flex-col p-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-white">
+                    Questions & Answers
+                  </h3>
+
+                  <p className="mt-2 text-sm text-zinc-400">
+                    Ask questions about this lecture.
+                  </p>
+                </div>
+
+                <textarea
+                  placeholder="Ask a question..."
+                  className="min-h-32 rounded-lg border border-zinc-700 bg-zinc-950 p-4 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-saffron-500"
+                />
+
+                <button className="mt-4 rounded-lg bg-saffron-500 px-4 py-3 font-medium text-white hover:bg-saffron-600 transition">
+                  Submit Question
+                </button>
+
+                <div className="mt-10 flex flex-1 items-center justify-center">
+                  <p className="text-center text-sm text-zinc-500">
+                    No questions yet.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* RESOURCES */}
+            {rightTab === "resources" && (
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white">
+                  Lesson Resources
+                </h3>
+
+                <p className="mt-2 text-sm text-zinc-400">
+                  Files attached to this lesson.
+                </p>
+
+                <div className="mt-8 space-y-4">
+                  {activeLesson?.resourceUrl ? (
+                    <a
+                      href={activeLesson.resourceUrl}
+                      download
+                      className="flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-950 p-4 transition hover:border-saffron-500"
+                    >
+                      <div>
+                        <p className="font-medium text-white">
+                          Lesson Resource
+                        </p>
+
+                        <p className="text-sm text-zinc-500">
+                          Download attachment
+                        </p>
+                      </div>
+
+                      <Download className="h-5 w-5 text-saffron-400" />
+                    </a>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-zinc-700 p-10 text-center">
+                      <Package className="mx-auto h-10 w-10 text-zinc-600" />
+
+                      <p className="mt-4 text-sm text-zinc-500">
+                        No resources available.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+
         <CourseCompletionModal
           open={showCompletionModal}
           courseTitle={course.title}
           courseId={course.id}
-          onClose={handleCloseCompletionModal}
+          onClose={() => setShowCompletionModal(false)}
         />
-      )}
-      {/* Lesson sidebar */}
-      <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0 overflow-y-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-ink-100">
-          <Link href={`/dashboard/courses/${id}`}
-            className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors">
-            <ArrowLeft className="w-3 h-3" />
-            Back to overview
-          </Link>
-          <h2 className="text-sm font-semibold text-ink-900 line-clamp-2">{course.title}</h2>
-          <div className="mt-2.5">
-            <div className="flex justify-between text-xs text-ink-400 mb-1">
-              <span>{completedCount}/{totalLessons} lessons</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Modules + lessons */}
-        <div className="flex-1">
-          {course.modules?.map((module, mi) => (
-            <div key={module.id} className="border-b border-ink-50">
-              <button
-                onClick={() => setExpanded((p) => ({ ...p, [module.id]: !p[module.id] }))}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-ink-50 transition-colors"
-              >
-                <div>
-                  <p className="text-xs font-semibold text-ink-700">
-                    Module {mi + 1}: {module.title}
-                  </p>
-                  <p className="text-[10px] text-ink-400 mt-0.5">
-                    {module.lessons.filter((l) => isLessonCompleted(l.id)).length}/
-                    {module.lessons.length} done
-                  </p>
-                </div>
-                {expanded[module.id]
-                  ? <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
-                  : <ChevronRight className="w-3.5 h-3.5 text-ink-400" />
-                }
-              </button>
-
-              {expanded[module.id] && (
-                <div className="pb-1">
-                  {module.lessons.map((lesson) => {
-                    const done    = isLessonCompleted(lesson.id);
-                    const active  = activeLesson?.id === lesson.id;
-                    return (
-                      <button
-                        key={lesson.id}
-                        onClick={() => setActiveLesson(lesson)}
-                        className={cn(
-                          'w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors',
-                          active ? 'bg-saffron-50' : 'hover:bg-ink-50',
-                        )}
-                      >
-                        {done
-                          ? <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
-                          : <Circle className={cn('w-4 h-4 flex-shrink-0 mt-0.5', active ? 'text-saffron-500' : 'text-ink-300')} />
-                        }
-                        <div className="min-w-0">
-                          <p className={cn(
-                            'text-xs leading-snug',
-                            active ? 'font-semibold text-saffron-700' : done ? 'text-ink-500' : 'text-ink-700',
-                          )}>
-                            {lesson.title}
-                          </p>
-                          {lesson.videoDuration && (
-                            <p className="text-[10px] text-ink-400 mt-0.5">
-                              {formatDuration(lesson.videoDuration)}
-                            </p>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {sidebarTab === 'notes' && activeLesson && (
-          <div className="flex-1 overflow-hidden">
-            <NotesPanel
-              courseId={id}
-              lectureId={activeLesson.id}
-              videoRef={videoRef}
-            />
-          </div>
-        )}
-
-        {sidebarTab === 'qa' && (
-          <div className="flex-1 flex items-center justify-center text-ink-400 px-4">
-            <div className="text-center">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="text-xs">Q&A coming soon</p>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* Main lesson content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {activeLesson ? (
-          <div className="max-w-3xl mx-auto">
-            {/* Video */}
-            {activeLesson.videoUrl && (
-              <div className="aspect-video rounded-2xl overflow-hidden bg-black mb-5">
-                <video
-                  ref={videoRef}
-                  key={activeLesson.videoUrl}
-                  src={activeLesson.videoUrl}
-                  controls
-                  className="w-full h-full"
-                  controlsList="nodownload"
-                />
-              </div>
-            )}
-
-            {/* Text content */}
-            {activeLesson.type === 'TEXT' && activeLesson.content && (
-              <div className="card p-6 mb-5 prose prose-sm max-w-none">
-                <div dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
-              </div>
-            )}
-
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <h1 className="font-display text-xl font-semibold text-ink-900 mb-1">
-                  {activeLesson.title}
-                </h1>
-                {activeLesson.description && (
-                  <p className="text-sm text-ink-500">{activeLesson.description}</p>
-                )}
-              </div>
-
-              {!isLessonCompleted(activeLesson.id) ? (
-                <button
-                  onClick={handleMarkComplete}
-                  disabled={marking}
-                  className="btn-leaf flex-shrink-0 ml-4"
-                >
-                  {marking
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <CheckCircle2 className="w-4 h-4" />
-                  }
-                  Mark complete
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-leaf-600 bg-leaf-50 px-3 py-1.5 rounded-xl">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Completed
-                </span>
-              )}
-            </div>
-
-            {/* Downloadable resource */}
-            {activeLesson.resourceUrl && (
-              <a
-                href={activeLesson.resourceUrl}
-                download
-                className="btn-secondary inline-flex mb-5"
-              >
-                <Download className="w-4 h-4" />
-                Download lesson resource
-              </a>
-            )}
-
-            {/* Completion celebration */}
-            {progress === 100 && !showCompletionModal && (
-              <div className="card p-6 bg-gradient-to-br from-saffron-50 to-leaf-50 border-saffron-100 text-center">
-                <div className="text-4xl mb-3">🎓</div>
-                <h2 className="font-display text-xl font-semibold text-ink-900 mb-2">
-                  Course complete!
-                </h2>
-                <p className="text-sm text-ink-500 mb-4">
-                  You&apos;ve finished all lessons. Your certificate will be issued shortly.
-                </p>
-                <Link href="/dashboard/certificates" className="btn-primary inline-flex">
-                  <Award className="w-4 h-4" />
-                  View my certificates
-                </Link>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-ink-400">
-            <p className="text-sm">Select a lesson to start learning</p>
-          </div>
-        )}
+        {/* </div> */}
       </div>
-    </div>
+    </>
   );
 }
-
-// Need to import Award inside LearnPage
-import { Award } from 'lucide-react';
