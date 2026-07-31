@@ -186,26 +186,28 @@
 
 /* Dark mode hook (placeholder defaults for future extension) */
 [data-theme='dark'] {
-  --color-bg-page: #161337;
-  --color-bg-surface: #1b1841;
-  --color-bg-subtle: #242056;
+  --color-bg-page: #0f0e1a;
+  --color-bg-surface: #16131f;
+  --color-bg-subtle: #1e1a2f;
   --color-bg-inverse: var(--color-brand-white);
+  --color-bg-primary: var(--color-brand-primary);
+  --color-bg-primary-hover: #6b60c9;
 
-  --color-text-body: #f6f5ff;
+  --color-text-body: #f0efff;
   --color-text-heading: #ffffff;
-  --color-text-muted: #cbc8ee;
-  --color-text-link: #b9b3ff;
+  --color-text-muted: #b9b3ff;
+  --color-text-link: #d9d5ff;
   --color-text-on-primary: #ffffff;
-  --color-text-on-inverse: #161337;
+  --color-text-on-inverse: #0f0e1a;
 
-  --color-border-default: #423d7d;
-  --color-border-strong: #5a54a5;
-  
-  /* Brand color parity */
-  --color-brand-deep: #e6e3ff;
-  --color-brand-primary: #7f77dd;
-  --color-brand-lilac: #17122f;
-  --color-brand-white: #000000;
+  --color-border-default: #2a2541;
+  --color-border-strong: #3d3660;
+  --color-focus-ring: #9c93ff;
+
+  /* Shadows for dark mode */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.24);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.32);
+  --shadow-lg: 0 12px 28px rgb(0 0 0 / 0.48);
 }
 
 /* Primitive component classes for consistent early UI implementation */

@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { TopBar } from '@/components/layout/TopBar';
+import { buildMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'Privacy Policy',
   description: 'How Hamplard handles your data and cookie preferences.',
-};
+  path: '/privacy',
+});
 
 export default function PrivacyPage() {
   return (

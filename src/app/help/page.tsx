@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { TopBar } from '@/components/layout/TopBar';
 import { FAQAccordion } from '@/components/ui/FAQAccordion';
+import { buildMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: 'Help Center',
   description: 'Find quick answers about learning, billing, and certificates on Hamplard.',
-};
+  path: '/help',
+});
 
 const helpItems = [
   {

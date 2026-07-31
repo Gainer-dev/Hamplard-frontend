@@ -17,6 +17,7 @@ const TYPE_COLORS: Record<string, string> = {
   ASSIGNMENT_SUBMITTED: 'bg-blue-50 text-blue-700',
   PAYMENT_RECEIVED:     'bg-leaf-50 text-leaf-700',
   NEW_ENROLLMENT:       'bg-saffron-50 text-saffron-700',
+  COURSE_ANNOUNCEMENT:  'bg-blue-50 text-blue-700',
 };
 
 export default function NotificationsPage() {
@@ -92,7 +93,7 @@ export default function NotificationsPage() {
                   <span className={`badge text-[10px] flex-shrink-0 ${
                     TYPE_COLORS[n.type] ?? 'bg-ink-100 text-ink-600'
                   }`}>
-                    {n.type.replace(/_/g, ' ').toLowerCase()}
+                    {n.type === 'COURSE_ANNOUNCEMENT' ? 'announcement' : n.type.replace(/_/g, ' ').toLowerCase()}
                   </span>
                 </div>
                 <p className="text-xs text-ink-500 leading-relaxed">{n.message}</p>

@@ -146,6 +146,16 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface Announcement {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  subject: string;
+  message: string;
+  deliveryCount: number;
+  createdAt: string;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data: T;

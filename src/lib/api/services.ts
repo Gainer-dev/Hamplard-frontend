@@ -1,9 +1,39 @@
 import { apiClient } from './client';
 import type {
   ApiResponse, PaginatedResponse, Course, Enrollment,
-  Certificate, Notification, User, Category,
-  Bundle, StudentEnrollmentRow, StudentDetail,
+  Certificate, Notification, User, Category, Announcement,
 } from '@/types';
+
+const isBrowser = typeof window !== 'undefined';
+const ANNOUNCEMENTS_STORAGE_KEY = 'hamplard_announcements';
+const NOTIFICATIONS_STORAGE_KEY = 'hamplard_notifications';
+
+const readStorage = <T,>(key: string, fallback: T): T => {
+  if (!isBrowser) return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStorage = (key: string, value: unknown) => {
+  if (isBrowser) {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+};
+
+const currentUserKey = () => {
+  if (!isBrowser) return 'anonymous';
+  return localStorage.getItem('hamplard_address') ?? 'anonymous';
+};
+
+const emitNotificationsUpdated = () => {
+  if (isBrowser) {
+    window.dispatchEvent(new Event('hamplard:notifications-updated'));
+  }
+};
 
 // ----------------------------------------------------------
 // Auth
@@ -225,17 +255,113 @@ export const certificatesApi = {
 };
 
 // ----------------------------------------------------------
+// Announcements
+// ----------------------------------------------------------
+export const announcementsApi = {
+  list: async (params?: { courseId?: string }): Promise<PaginatedResponse<Announcement>> => {
+    try {
+      const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Announcement>>>(
+        '/announcements', { params },
+      );
+      return data.data;
+    } catch {
+      const stored = readStorage<Announcement[]>(ANNOUNCEMENTS_STORAGE_KEY, []);
+      const filtered = params?.courseId
+        ? stored.filter((item) => item.courseId === params.courseId)
+        : stored;
+      return {
+        data: filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+        meta: { total: filtered.length, page: 1, limit: 20, totalPages: 1 },
+      };
+    }
+  },
+
+  create: async (payload: {
+    courseId: string;
+    courseTitle: string;
+    subject: string;
+    message: string;
+    deliveryCount?: number;
+  }): Promise<Announcement> => {
+    try {
+      const { data } = await apiClient.post<ApiResponse<Announcement>>('/announcements', payload);
+      return data.data;
+    } catch {
+      const announcement: Announcement = {
+        id: `announcement-${Date.now()}`,
+        courseId: payload.courseId,
+        courseTitle: payload.courseTitle,
+        subject: payload.subject,
+        message: payload.message,
+        deliveryCount: payload.deliveryCount ?? 1,
+        createdAt: new Date().toISOString(),
+      };
+
+      const stored = readStorage<Announcement[]>(ANNOUNCEMENTS_STORAGE_KEY, []);
+      const next = [announcement, ...stored];
+      writeStorage(ANNOUNCEMENTS_STORAGE_KEY, next);
+
+      const notification: Notification = {
+        id: `notification-${Date.now()}`,
+        type: 'COURSE_ANNOUNCEMENT',
+        title: payload.subject,
+        message: payload.message,
+        data: { announcementId: announcement.id, courseId: payload.courseId },
+        read: false,
+        createdAt: announcement.createdAt,
+      };
+      const existingNotifications = readStorage<Notification[]>(NOTIFICATIONS_STORAGE_KEY, []);
+      const nextNotifications = [
+        { ...notification, userKey: currentUserKey() },
+        ...existingNotifications.filter((item) => item.id !== notification.id),
+      ];
+      writeStorage(NOTIFICATIONS_STORAGE_KEY, nextNotifications);
+      emitNotificationsUpdated();
+      return announcement;
+    }
+  },
+};
+
+// ----------------------------------------------------------
 // Notifications
 // ----------------------------------------------------------
 export const notificationsApi = {
   list: async (params?: { unreadOnly?: boolean }) => {
-    const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Notification>>>(
-      '/notifications', { params },
-    );
-    return data.data;
+    try {
+      const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Notification>>>(
+        '/notifications', { params },
+      );
+      return data.data;
+    } catch {
+      const stored = readStorage<Array<Notification & { userKey?: string }>>(NOTIFICATIONS_STORAGE_KEY, []);
+      const forCurrentUser = stored.filter((item) => item.userKey === currentUserKey());
+      const filtered = params?.unreadOnly ? forCurrentUser.filter((item) => !item.read) : forCurrentUser;
+      return {
+        data: filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+        meta: { total: filtered.length, page: 1, limit: 20, totalPages: 1 },
+      };
+    }
   },
-  markRead:    async (id: string) => apiClient.patch(`/notifications/${id}/read`),
-  markAllRead: async ()           => apiClient.patch('/notifications/read-all'),
+  markRead: async (id: string) => {
+    try {
+      await apiClient.patch(`/notifications/${id}/read`);
+    } catch {
+      const stored = readStorage<Array<Notification & { userKey?: string }>>(NOTIFICATIONS_STORAGE_KEY, []);
+      const updated = stored.map((item) => (item.id === id ? { ...item, read: true } : item));
+      writeStorage(NOTIFICATIONS_STORAGE_KEY, updated);
+      emitNotificationsUpdated();
+    }
+  },
+  markAllRead: async () => {
+    try {
+      await apiClient.patch('/notifications/read-all');
+    } catch {
+      const stored = readStorage<Array<Notification & { userKey?: string }>>(NOTIFICATIONS_STORAGE_KEY, []);
+      const updated = stored.map((item) => ({ ...item, read: true }));
+      writeStorage(NOTIFICATIONS_STORAGE_KEY, updated);
+      emitNotificationsUpdated();
+    }
+  },
 };
 
 // ----------------------------------------------------------
@@ -346,6 +472,42 @@ export const instructorAnalyticsApi = {
     const { data } = await apiClient.get<ApiResponse<StudentDetail>>(
       `/users/me/instructor-students/${studentId}`,
     );
+    return data.data;
+  },
+};
+
+// ----------------------------------------------------------
+// Promo Codes
+// ----------------------------------------------------------
+export const promoCodesApi = {
+  create: async (payload: {
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED';
+    discountValue: number;
+    expiryDate: string;
+    maxUses: number;
+  }) => {
+    const { data } = await apiClient.post('/promo-codes', payload);
+    return data.data;
+  },
+
+  getMy: async (params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<any>> => {
+    const { data } = await apiClient.get<ApiResponse<PaginatedResponse<any>>>(
+      '/promo-codes/my', { params },
+    );
+    return data.data;
+  },
+
+  toggleActive: async (promoCodeId: string, isActive: boolean) => {
+    const { data } = await apiClient.patch(`/promo-codes/${promoCodeId}`, { isActive });
+    return data.data;
+  },
+
+  validate: async (code: string, courseId: string) => {
+    const { data } = await apiClient.post(`/promo-codes/validate`, { code, courseId });
     return data.data;
   },
 };
