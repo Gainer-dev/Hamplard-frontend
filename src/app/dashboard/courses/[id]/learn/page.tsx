@@ -2,36 +2,36 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   CheckCircle2, Circle, ChevronDown, ChevronRight,
-  Download, Loader2, ArrowLeft, MessageSquare, FileText,
+  Download, Loader2, ArrowLeft, MessageSquare, FileText, Award,
 } from 'lucide-react';
-import Link from 'next/link';
 import { coursesApi, enrollmentsApi, lessonsApi } from '@/lib/api/services';
 import { formatDuration, cn } from '@/lib/utils';
-import type { Course, Enrollment, Lesson, LessonProgress } from '@/types';
+import type { Course, Enrollment, Lesson } from '@/types';
 import NotesPanel from '@/components/learn/NotesPanel';
+import CourseCompletionModal from '@/components/learn/CourseCompletionModal';
+import { Breadcrumb } from '@/components/ui';
 
 type SidebarTab = 'lessons' | 'notes' | 'qa';
-import CourseCompletionModal from '@/components/learn/CourseCompletionModal';
-import type { Course, Enrollment, Lesson, LessonProgress } from '@/types';
 
 export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
 
-  const [course,      setCourse]      = useState<Course | null>(null);
-  const [enrollment,  setEnrollment]  = useState<Enrollment | null>(null);
-  const [activeLesson,setActiveLesson]= useState<Lesson | null>(null);
-  const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
-  const [loading,     setLoading]     = useState(true);
-  const [marking,     setMarking]     = useState(false);
-  const [sidebarTab,  setSidebarTab]  = useState<SidebarTab>('lessons');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const progressRef = useRef<NodeJS.Timeout | null>(null);
+  const [course,       setCourse]       = useState<Course | null>(null);
+  const [enrollment,   setEnrollment]   = useState<Enrollment | null>(null);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [expanded,     setExpanded]     = useState<Record<string, boolean>>({});
+  const [loading,      setLoading]      = useState(true);
+  const [marking,      setMarking]      = useState(false);
+  const [sidebarTab,   setSidebarTab]   = useState<SidebarTab>('lessons');
   const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const progressRef = useRef<NodeJS.Timeout | null>(null);
-  const previousCompletedCountRef = useRef<number | null>(null);
-  const hasInitializedCompletionStateRef = useRef(false);
+
+  const videoRef                      = useRef<HTMLVideoElement | null>(null);
+  const progressRef                   = useRef<NodeJS.Timeout | null>(null);
+  const previousCompletedCountRef     = useRef<number | null>(null);
+  const hasInitializedCompletionState = useRef(false);
 
   useEffect(() => {
     Promise.all([
@@ -43,7 +43,7 @@ export default function LearnPage() {
       // Open first module by default
       if (c.modules?.[0]) setExpanded({ [c.modules[0].id]: true });
       // Start from first incomplete lesson
-      const allLessons = c.modules?.flatMap((m) => m.lessons) ?? [];
+      const allLessons  = c.modules?.flatMap((m) => m.lessons) ?? [];
       const completedIds = new Set(
         e.lessonProgress?.filter((p) => p.completed).map((p) => p.lessonId),
       );
@@ -59,22 +59,24 @@ export default function LearnPage() {
   useEffect(() => {
     if (!course || !enrollment) return;
 
-    const totalLessons = course.modules?.flatMap((m) => m.lessons).length ?? 0;
-    const completedCount = enrollment.lessonProgress?.filter((p) => p.completed).length ?? 0;
-    const isComplete = totalLessons > 0 && completedCount >= totalLessons;
-    const previouslyIncomplete = previousCompletedCountRef.current === null || previousCompletedCountRef.current < totalLessons;
-    const newlyCompleted = hasInitializedCompletionStateRef.current && previouslyIncomplete && isComplete;
+    const totalLessons    = course.modules?.flatMap((m) => m.lessons).length ?? 0;
+    const completedCount  = enrollment.lessonProgress?.filter((p) => p.completed).length ?? 0;
+    const isComplete      = totalLessons > 0 && completedCount >= totalLessons;
+    const prevIncomplete  = previousCompletedCountRef.current === null
+      || previousCompletedCountRef.current < totalLessons;
+    const newlyCompleted  = hasInitializedCompletionState.current && prevIncomplete && isComplete;
 
-    previousCompletedCountRef.current = completedCount;
-    hasInitializedCompletionStateRef.current = true;
+    previousCompletedCountRef.current    = completedCount;
+    hasInitializedCompletionState.current = true;
 
     if (!isComplete) {
       setShowCompletionModal(false);
       return;
     }
 
-    const storageKey = `course-completion:${course.id}`;
-    const hasSeenModal = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === 'true';
+    const storageKey  = `course-completion:${course.id}`;
+    const hasSeenModal = typeof window !== 'undefined'
+      && window.localStorage.getItem(storageKey) === 'true';
 
     if (newlyCompleted && !hasSeenModal) {
       setShowCompletionModal(true);
@@ -94,7 +96,6 @@ export default function LearnPage() {
     setMarking(true);
     try {
       await lessonsApi.markComplete(activeLesson.id, enrollment.id);
-      // Re-fetch enrollment to update progress
       const updated = await enrollmentsApi.get(id);
       setEnrollment(updated);
     } finally {
@@ -106,67 +107,60 @@ export default function LearnPage() {
   const completedCount = enrollment?.lessonProgress?.filter((p) => p.completed).length ?? 0;
   const progress       = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
-  const handleCloseCompletionModal = () => setShowCompletionModal(false);
-
   if (loading) return (
     <div className="flex justify-center py-16">
       <Loader2 className="w-6 h-6 text-saffron-500 animate-spin" />
     </div>
   );
 
-  if (!course) return <div className="text-center py-16 text-ink-500">Course not found.</div>;
+  if (!course) return (
+    <div className="text-center py-16 text-ink-500">Course not found.</div>
+  );
 
   return (
     <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      {/* Left sidebar – Lessons / Notes / Q&A tabs */}
+      {course && (
+        <CourseCompletionModal
+          open={showCompletionModal}
+          courseTitle={course.title}
+          courseId={course.id}
+          onClose={() => setShowCompletionModal(false)}
+        />
+      )}
+
+      {/* ── Left sidebar ── */}
       <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0">
         {/* Tab bar */}
         <div className="flex border-b border-ink-100">
-          <button
-            onClick={() => setSidebarTab('lessons')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'lessons'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <Circle className="w-3.5 h-3.5" />
-            Lessons
-          </button>
-          <button
-            onClick={() => setSidebarTab('notes')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'notes'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Notes
-          </button>
-          <button
-            onClick={() => setSidebarTab('qa')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
-              sidebarTab === 'qa'
-                ? 'text-saffron-600 border-b-2 border-saffron-500'
-                : 'text-ink-400 hover:text-ink-600',
-            )}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Q&A
-          </button>
+          {([
+            { tab: 'lessons' as SidebarTab, icon: <Circle className="w-3.5 h-3.5" />,       label: 'Lessons' },
+            { tab: 'notes'   as SidebarTab, icon: <FileText className="w-3.5 h-3.5" />,     label: 'Notes'   },
+            { tab: 'qa'      as SidebarTab, icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Q&A'    },
+          ] as const).map(({ tab, icon, label }) => (
+            <button
+              key={tab}
+              onClick={() => setSidebarTab(tab)}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-3 transition-colors',
+                sidebarTab === tab
+                  ? 'text-saffron-600 border-b-2 border-saffron-500'
+                  : 'text-ink-400 hover:text-ink-600',
+              )}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Tab content */}
+        {/* Lessons tab */}
         {sidebarTab === 'lessons' && (
           <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Header */}
             <div className="p-4 border-b border-ink-100">
-              <Link href={`/dashboard/courses/${id}`}
-                className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors">
+              <Link
+                href={`/dashboard/courses/${id}`}
+                className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors"
+              >
                 <ArrowLeft className="w-3 h-3" />
                 Back to overview
               </Link>
@@ -182,7 +176,6 @@ export default function LearnPage() {
               </div>
             </div>
 
-            {/* Modules + lessons */}
             <div className="flex-1 overflow-y-auto">
               {course.modules?.map((module, mi) => (
                 <div key={module.id} className="border-b border-ink-50">
@@ -208,8 +201,8 @@ export default function LearnPage() {
                   {expanded[module.id] && (
                     <div className="pb-1">
                       {module.lessons.map((lesson) => {
-                        const done    = isLessonCompleted(lesson.id);
-                        const active  = activeLesson?.id === lesson.id;
+                        const done   = isLessonCompleted(lesson.id);
+                        const active = activeLesson?.id === lesson.id;
                         return (
                           <button
                             key={lesson.id}
@@ -241,98 +234,13 @@ export default function LearnPage() {
                       })}
                     </div>
                   )}
-      {course && (
-        <CourseCompletionModal
-          open={showCompletionModal}
-          courseTitle={course.title}
-          courseId={course.id}
-          onClose={handleCloseCompletionModal}
-        />
-      )}
-      {/* Lesson sidebar */}
-      <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0 overflow-y-auto">
-        {/* Header */}
-        <div className="p-4 border-b border-ink-100">
-          <Link href={`/dashboard/courses/${id}`}
-            className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors">
-            <ArrowLeft className="w-3 h-3" />
-            Back to overview
-          </Link>
-          <h2 className="text-sm font-semibold text-ink-900 line-clamp-2">{course.title}</h2>
-          <div className="mt-2.5">
-            <div className="flex justify-between text-xs text-ink-400 mb-1">
-              <span>{completedCount}/{totalLessons} lessons</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Modules + lessons */}
-        <div className="flex-1">
-          {course.modules?.map((module, mi) => (
-            <div key={module.id} className="border-b border-ink-50">
-              <button
-                onClick={() => setExpanded((p) => ({ ...p, [module.id]: !p[module.id] }))}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-ink-50 transition-colors"
-              >
-                <div>
-                  <p className="text-xs font-semibold text-ink-700">
-                    Module {mi + 1}: {module.title}
-                  </p>
-                  <p className="text-[10px] text-ink-400 mt-0.5">
-                    {module.lessons.filter((l) => isLessonCompleted(l.id)).length}/
-                    {module.lessons.length} done
-                  </p>
-                </div>
-                {expanded[module.id]
-                  ? <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
-                  : <ChevronRight className="w-3.5 h-3.5 text-ink-400" />
-                }
-              </button>
-
-              {expanded[module.id] && (
-                <div className="pb-1">
-                  {module.lessons.map((lesson) => {
-                    const done    = isLessonCompleted(lesson.id);
-                    const active  = activeLesson?.id === lesson.id;
-                    return (
-                      <button
-                        key={lesson.id}
-                        onClick={() => setActiveLesson(lesson)}
-                        className={cn(
-                          'w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors',
-                          active ? 'bg-saffron-50' : 'hover:bg-ink-50',
-                        )}
-                      >
-                        {done
-                          ? <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
-                          : <Circle className={cn('w-4 h-4 flex-shrink-0 mt-0.5', active ? 'text-saffron-500' : 'text-ink-300')} />
-                        }
-                        <div className="min-w-0">
-                          <p className={cn(
-                            'text-xs leading-snug',
-                            active ? 'font-semibold text-saffron-700' : done ? 'text-ink-500' : 'text-ink-700',
-                          )}>
-                            {lesson.title}
-                          </p>
-                          {lesson.videoDuration && (
-                            <p className="text-[10px] text-ink-400 mt-0.5">
-                              {formatDuration(lesson.videoDuration)}
-                            </p>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Notes tab */}
         {sidebarTab === 'notes' && activeLesson && (
           <div className="flex-1 overflow-hidden">
             <NotesPanel
@@ -343,6 +251,7 @@ export default function LearnPage() {
           </div>
         )}
 
+        {/* Q&A tab */}
         {sidebarTab === 'qa' && (
           <div className="flex-1 flex items-center justify-center text-ink-400 px-4">
             <div className="text-center">
@@ -353,10 +262,21 @@ export default function LearnPage() {
         )}
       </aside>
 
-      {/* Main lesson content */}
+      {/* ── Main lesson content ── */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeLesson ? (
           <div className="max-w-3xl mx-auto">
+            {/* Breadcrumb — sits above the lesson content */}
+            <Breadcrumb
+              items={[
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'My Courses', href: '/dashboard/courses' },
+                { label: course.title, href: `/dashboard/courses/${id}` },
+                { label: activeLesson.title },
+              ]}
+              className="mb-5"
+            />
+
             {/* Video */}
             {activeLesson.videoUrl && (
               <div className="aspect-video rounded-2xl overflow-hidden bg-black mb-5">
@@ -446,6 +366,3 @@ export default function LearnPage() {
     </div>
   );
 }
-
-// Need to import Award inside LearnPage
-import { Award } from 'lucide-react';
