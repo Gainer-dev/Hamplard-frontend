@@ -1,9 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState} from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, X, ArrowRight } from 'lucide-react';
 import { ShoppingBag, X, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '@/lib/hooks/use-cart-store';
 import { promoCodesApi } from '@/lib/api/services';
