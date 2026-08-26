@@ -9,7 +9,7 @@ const FOOTER_COLUMNS = [
   {
     title: 'About Hamplard',
     links: [
-      { label: 'Our story', href: '/#about' },
+      { label: 'Our story', href: '/about' },
       { label: 'Careers', href: '/#careers' },
       { label: 'Partner with us', href: '/#partners' },
       { label: 'Blog', href: '/#blog' },
