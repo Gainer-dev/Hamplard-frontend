@@ -28,9 +28,9 @@ const FOOTER_COLUMNS = [
   {
     title: 'Support',
     links: [
-      { label: 'Help center', href: '/#help' },
+      { label: 'Help center', href: '/help' },
+      { label: 'Contact us', href: '/contact' },
       { label: 'Community', href: '/#community' },
-      { label: 'Contact us', href: '/#contact' },
       { label: 'FAQs', href: '/#faqs' },
     ],
   },
