@@ -530,3 +530,39 @@ export const contactApi = {
   },
 };
 
+// ----------------------------------------------------------
+// Two-Factor Authentication
+// ----------------------------------------------------------
+export const twoFactorApi = {
+  setupInitiate: async (): Promise<{ qrCode: string; secret: string }> => {
+    const { data } = await apiClient.post<ApiResponse<{ qrCode: string; secret: string }>>(
+      '/2fa/setup',
+    );
+    return data.data;
+  },
+
+  setupVerify: async (code: string): Promise<{ backupCodes: string[] }> => {
+    const { data } = await apiClient.post<ApiResponse<{ backupCodes: string[] }>>(
+      '/2fa/verify',
+      { code },
+    );
+    return data.data;
+  },
+
+  disable: async (code: string): Promise<{ success: boolean }> => {
+    const { data } = await apiClient.post<ApiResponse<{ success: boolean }>>(
+      '/2fa/disable',
+      { code },
+    );
+    return data.data;
+  },
+
+  getStatus: async (): Promise<{ enabled: boolean }> => {
+    const { data } = await apiClient.get<ApiResponse<{ enabled: boolean }>>(
+      '/2fa/status',
+    );
+    return data.data;
+  },
+};
+
+
