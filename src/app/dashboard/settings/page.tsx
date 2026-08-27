@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, Shield, Save, Loader2 } from 'lucide-react';
+import { Bell, Shield, Save, Loader2, Trash2 } from 'lucide-react';
 import { Breadcrumb } from '@/components/ui';
+import DeleteAccountModal from '@/components/auth/DeleteAccountModal';
 
 export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
@@ -12,6 +13,7 @@ export default function SettingsPage() {
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [courseUpdates, setCourseUpdates] = useState(true);
   const [securityAlerts, setSecurityAlerts] = useState(true);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     // No dedicated settings endpoints found in current client services.
@@ -134,6 +136,26 @@ export default function SettingsPage() {
           Preferences will be updated once backend endpoints are available.
         </span>
       </div>
+
+      <section className="card mt-8 border-red-100 p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-red-600" aria-hidden="true" />
+              <h2 className="font-semibold text-ink-900">Danger zone</h2>
+            </div>
+            <p className="mt-2 max-w-xl text-sm text-ink-500">
+              Permanently delete your account, progress, certificates, and course access.
+            </p>
+          </div>
+          <button type="button" onClick={() => setDeleteModalOpen(true)} className="btn-danger shrink-0">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Delete account
+          </button>
+        </div>
+      </section>
+
+      <DeleteAccountModal open={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} />
     </div>
   );
 }

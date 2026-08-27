@@ -376,6 +376,9 @@ export const usersApi = {
     const { data } = await apiClient.patch<ApiResponse<User>>('/users/me', payload);
     return data.data;
   },
+  deleteAccount: async (password: string): Promise<void> => {
+    await apiClient.delete('/users/me', { data: { password } });
+  },
   getInstructorStats: async () => {
     const { data } = await apiClient.get('/users/me/instructor-stats');
     return data.data;
