@@ -1,16 +1,30 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import {
   CheckCircle2, Circle, ChevronDown, ChevronRight,
-  Download, Loader2, ArrowLeft, Award,
+  Download, Loader2, ArrowLeft, Award, SkipForward,
 } from 'lucide-react';
 import Link from 'next/link';
 import { coursesApi, enrollmentsApi, lessonsApi } from '@/lib/api/services';
 import { formatDuration, cn } from '@/lib/utils';
 import CourseCompletionModal from '@/components/learn/CourseCompletionModal';
-import type { Course, Enrollment, Lesson, LessonProgress } from '@/types';
+import { VideoPlayer } from '@/components/learn/VideoPlayer';
+import { AutoplayCountdown } from '@/components/learn/AutoplayCountdown';
+import type { Course, Enrollment, Lesson } from '@/types';
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const AUTOPLAY_STORAGE_KEY = 'hamplard:autoplay';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Returns the flat ordered list of all lessons across every module */
+function flatLessons(course: Course): Lesson[] {
+  return course.modules?.flatMap((m) => m.lessons) ?? [];
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 export default function LearnPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,10 +36,57 @@ export default function LearnPage() {
   const [loading,     setLoading]     = useState(true);
   const [marking,     setMarking]     = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  // ── Autoplay state ───────────────────────────────────────────────────────
+  const [autoplay, setAutoplay] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = window.localStorage.getItem(AUTOPLAY_STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
+  });
+  const [showCountdown, setShowCountdown] = useState(false);
+
   const progressRef = useRef<NodeJS.Timeout | null>(null);
   const previousCompletedCountRef = useRef<number | null>(null);
   const hasInitializedCompletionStateRef = useRef(false);
 
+  // ── Derived: next lesson ─────────────────────────────────────────────────
+  const nextLesson = useMemo<Lesson | null>(() => {
+    if (!course || !activeLesson) return null;
+    const all = flatLessons(course);
+    const idx = all.findIndex((l) => l.id === activeLesson.id);
+    return idx >= 0 && idx < all.length - 1 ? all[idx + 1] : null;
+  }, [course, activeLesson]);
+
+  // ── Persist autoplay preference ──────────────────────────────────────────
+  const handleAutoplayChange = useCallback((enabled: boolean) => {
+    setAutoplay(enabled);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(AUTOPLAY_STORAGE_KEY, String(enabled));
+    }
+    // If the user turns autoplay off while the countdown is visible, cancel it
+    if (!enabled) setShowCountdown(false);
+  }, []);
+
+  // ── Video ended handler ──────────────────────────────────────────────────
+  const handleVideoEnded = useCallback(() => {
+    if (autoplay && nextLesson) {
+      setShowCountdown(true);
+    }
+    // If autoplay is off or there's no next lesson the video just stops
+  }, [autoplay, nextLesson]);
+
+  // ── Navigate to next lecture ─────────────────────────────────────────────
+  const goToNext = useCallback(() => {
+    if (!nextLesson) return;
+    setShowCountdown(false);
+    setActiveLesson(nextLesson);
+  }, [nextLesson]);
+
+  const cancelCountdown = useCallback(() => {
+    setShowCountdown(false);
+  }, []);
+
+  // ── Initial data load ────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
       coursesApi.get(id),
@@ -36,9 +97,9 @@ export default function LearnPage() {
       // Open first module by default
       if (c.modules?.[0]) setExpanded({ [c.modules[0].id]: true });
       // Start from first incomplete lesson
-      const allLessons = c.modules?.flatMap((m) => m.lessons) ?? [];
+      const allLessons = flatLessons(c);
       const completedIds = new Set(
-        e.lessonProgress?.filter((p) => p.completed).map((p) => p.lessonId),
+        e.lessonProgress?.filter((p: { completed: boolean }) => p.completed).map((p: { lessonId: string }) => p.lessonId),
       );
       const first = allLessons.find((l) => !completedIds.has(l.id)) ?? allLessons[0];
       if (first) setActiveLesson(first);
@@ -49,14 +110,18 @@ export default function LearnPage() {
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
   }, [id]);
 
+  // ── Course completion detection ──────────────────────────────────────────
   useEffect(() => {
     if (!course || !enrollment) return;
 
-    const totalLessons = course.modules?.flatMap((m) => m.lessons).length ?? 0;
-    const completedCount = enrollment.lessonProgress?.filter((p) => p.completed).length ?? 0;
+    const totalLessons = flatLessons(course).length;
+    const completedCount = enrollment.lessonProgress?.filter((p: { completed: boolean }) => p.completed).length ?? 0;
     const isComplete = totalLessons > 0 && completedCount >= totalLessons;
-    const previouslyIncomplete = previousCompletedCountRef.current === null || previousCompletedCountRef.current < totalLessons;
-    const newlyCompleted = hasInitializedCompletionStateRef.current && previouslyIncomplete && isComplete;
+    const previouslyIncomplete =
+      previousCompletedCountRef.current === null ||
+      previousCompletedCountRef.current < totalLessons;
+    const newlyCompleted =
+      hasInitializedCompletionStateRef.current && previouslyIncomplete && isComplete;
 
     previousCompletedCountRef.current = completedCount;
     hasInitializedCompletionStateRef.current = true;
@@ -67,7 +132,9 @@ export default function LearnPage() {
     }
 
     const storageKey = `course-completion:${course.id}`;
-    const hasSeenModal = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === 'true';
+    const hasSeenModal =
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(storageKey) === 'true';
 
     if (newlyCompleted && !hasSeenModal) {
       setShowCompletionModal(true);
@@ -79,15 +146,22 @@ export default function LearnPage() {
     }
   }, [course, enrollment]);
 
+  // ── Dismiss countdown when lesson changes (e.g. sidebar click) ──────────
+  useEffect(() => {
+    setShowCountdown(false);
+  }, [activeLesson]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
   const isLessonCompleted = (lessonId: string) =>
-    enrollment?.lessonProgress?.some((p) => p.lessonId === lessonId && p.completed) ?? false;
+    enrollment?.lessonProgress?.some(
+      (p: { lessonId: string; completed: boolean }) => p.lessonId === lessonId && p.completed,
+    ) ?? false;
 
   const handleMarkComplete = async () => {
     if (!activeLesson || !enrollment || marking) return;
     setMarking(true);
     try {
       await lessonsApi.markComplete(activeLesson.id, enrollment.id);
-      // Re-fetch enrollment to update progress
       const updated = await enrollmentsApi.get(id);
       setEnrollment(updated);
     } finally {
@@ -95,12 +169,11 @@ export default function LearnPage() {
     }
   };
 
-  const totalLessons   = course?.modules?.flatMap((m) => m.lessons).length ?? 0;
-  const completedCount = enrollment?.lessonProgress?.filter((p) => p.completed).length ?? 0;
+  const totalLessons   = course ? flatLessons(course).length : 0;
+  const completedCount = enrollment?.lessonProgress?.filter((p: { completed: boolean }) => p.completed).length ?? 0;
   const progress       = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
-  const handleCloseCompletionModal = () => setShowCompletionModal(false);
-
+  // ── Render ────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="flex justify-center py-16">
       <Loader2 className="w-6 h-6 text-saffron-500 animate-spin" />
@@ -116,15 +189,18 @@ export default function LearnPage() {
           open={showCompletionModal}
           courseTitle={course.title}
           courseId={course.id}
-          onClose={handleCloseCompletionModal}
+          onClose={() => setShowCompletionModal(false)}
         />
       )}
-      {/* Lesson sidebar */}
+
+      {/* ── Lesson sidebar ──────────────────────────────────────────────── */}
       <aside className="w-72 bg-white border-r border-ink-100 flex flex-col flex-shrink-0 overflow-y-auto">
         {/* Header */}
         <div className="p-4 border-b border-ink-100">
-          <Link href={`/dashboard/courses/${id}`}
-            className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors">
+          <Link
+            href={`/dashboard/courses/${id}`}
+            className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink-700 mb-2 transition-colors"
+          >
             <ArrowLeft className="w-3 h-3" />
             Back to overview
           </Link>
@@ -145,7 +221,9 @@ export default function LearnPage() {
           {course.modules?.map((module, mi) => (
             <div key={module.id} className="border-b border-ink-50">
               <button
-                onClick={() => setExpanded((p) => ({ ...p, [module.id]: !p[module.id] }))}
+                onClick={() =>
+                  setExpanded((p) => ({ ...p, [module.id]: !p[module.id] }))
+                }
                 className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-ink-50 transition-colors"
               >
                 <div>
@@ -157,17 +235,18 @@ export default function LearnPage() {
                     {module.lessons.length} done
                   </p>
                 </div>
-                {expanded[module.id]
-                  ? <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
-                  : <ChevronRight className="w-3.5 h-3.5 text-ink-400" />
-                }
+                {expanded[module.id] ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 text-ink-400" />
+                )}
               </button>
 
               {expanded[module.id] && (
                 <div className="pb-1">
                   {module.lessons.map((lesson) => {
-                    const done    = isLessonCompleted(lesson.id);
-                    const active  = activeLesson?.id === lesson.id;
+                    const done   = isLessonCompleted(lesson.id);
+                    const active = activeLesson?.id === lesson.id;
                     return (
                       <button
                         key={lesson.id}
@@ -177,15 +256,27 @@ export default function LearnPage() {
                           active ? 'bg-saffron-50' : 'hover:bg-ink-50',
                         )}
                       >
-                        {done
-                          ? <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
-                          : <Circle className={cn('w-4 h-4 flex-shrink-0 mt-0.5', active ? 'text-saffron-500' : 'text-ink-300')} />
-                        }
+                        {done ? (
+                          <CheckCircle2 className="w-4 h-4 text-leaf-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <Circle
+                            className={cn(
+                              'w-4 h-4 flex-shrink-0 mt-0.5',
+                              active ? 'text-saffron-500' : 'text-ink-300',
+                            )}
+                          />
+                        )}
                         <div className="min-w-0">
-                          <p className={cn(
-                            'text-xs leading-snug',
-                            active ? 'font-semibold text-saffron-700' : done ? 'text-ink-500' : 'text-ink-700',
-                          )}>
+                          <p
+                            className={cn(
+                              'text-xs leading-snug',
+                              active
+                                ? 'font-semibold text-saffron-700'
+                                : done
+                                  ? 'text-ink-500'
+                                  : 'text-ink-700',
+                            )}
+                          >
                             {lesson.title}
                           </p>
                           {lesson.videoDuration && (
@@ -204,20 +295,33 @@ export default function LearnPage() {
         </div>
       </aside>
 
-      {/* Main lesson content */}
+      {/* ── Main lesson content ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeLesson ? (
           <div className="max-w-3xl mx-auto">
             {/* Video */}
             {activeLesson.videoUrl && (
-              <div className="aspect-video rounded-2xl overflow-hidden bg-black mb-5">
-                <video
+              <div className="relative aspect-video rounded-2xl overflow-hidden bg-black mb-5">
+                <VideoPlayer
                   key={activeLesson.videoUrl}
                   src={activeLesson.videoUrl}
-                  controls
+                  enrollmentId={enrollment?.id}
+                  lessonId={activeLesson.id}
+                  autoplay={autoplay}
+                  onAutoplayChange={handleAutoplayChange}
+                  onEnded={handleVideoEnded}
                   className="w-full h-full"
-                  controlsList="nodownload"
                 />
+
+                {/* Autoplay countdown overlay */}
+                {showCountdown && nextLesson && (
+                  <AutoplayCountdown
+                    nextTitle={nextLesson.title}
+                    seconds={5}
+                    onComplete={goToNext}
+                    onCancel={cancelCountdown}
+                  />
+                )}
               </div>
             )}
 
@@ -228,6 +332,7 @@ export default function LearnPage() {
               </div>
             )}
 
+            {/* Title + mark complete row */}
             <div className="flex items-start justify-between mb-5">
               <div>
                 <h1 className="font-display text-xl font-semibold text-ink-900 mb-1">
@@ -244,10 +349,11 @@ export default function LearnPage() {
                   disabled={marking}
                   className="btn-leaf flex-shrink-0 ml-4"
                 >
-                  {marking
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <CheckCircle2 className="w-4 h-4" />
-                  }
+                  {marking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
                   Mark complete
                 </button>
               ) : (
@@ -268,6 +374,19 @@ export default function LearnPage() {
                 <Download className="w-4 h-4" />
                 Download lesson resource
               </a>
+            )}
+
+            {/* Next lecture button (shown when autoplay is OFF and video has ended) */}
+            {!autoplay && nextLesson && !activeLesson.videoUrl && (
+              <div className="flex justify-end mb-5">
+                <button
+                  onClick={goToNext}
+                  className="btn-secondary inline-flex items-center gap-2"
+                >
+                  <SkipForward className="w-4 h-4" />
+                  Next lecture
+                </button>
+              </div>
             )}
 
             {/* Completion celebration */}
