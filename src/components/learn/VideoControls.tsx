@@ -51,7 +51,7 @@ export function VideoControls({
       />
 
       {/* Controls row */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
         {/* Play / Pause */}
         <button
           onClick={onPlayPause}
@@ -82,12 +82,12 @@ export function VideoControls({
           step={0.05}
           value={muted ? 0 : volume}
           onChange={(e) => onVolume(parseFloat(e.target.value))}
-          className="w-16 h-1 accent-saffron-500 cursor-pointer"
+          className="hidden md:block w-16 h-1 accent-saffron-500 cursor-pointer"
           aria-label="Volume"
         />
 
         {/* Time */}
-        <span className="text-white text-[10px] tabular-nums ml-1 select-none">
+        <span className="hidden sm:block text-white text-[10px] tabular-nums ml-1 select-none">
           {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration))}
         </span>
 
@@ -97,7 +97,7 @@ export function VideoControls({
         <select
           value={speed}
           onChange={(e) => onSpeed(parseFloat(e.target.value))}
-          className="bg-transparent text-white text-xs cursor-pointer outline-none border border-white/20 rounded px-1 py-0.5 hover:border-white/50 transition-colors"
+          className="hidden md:block bg-transparent text-white text-xs cursor-pointer outline-none border border-white/20 rounded px-1 py-0.5 hover:border-white/50 transition-colors"
           aria-label="Playback speed"
         >
           {SPEEDS.map((s) => (

@@ -2,12 +2,13 @@
 
 import React, {
   useRef, useState, useEffect, useCallback,
+  forwardRef, useImperativeHandle
 } from 'react';
 import { Loader2 } from 'lucide-react';
 import { VideoControls } from './VideoControls';
 
 // ── Types ──────────────────────────────────────────────────────────
-export interface VideoPlayerProps {
+interface VideoPlayerProps {
   /** URL of the video to play */
   src: string;
   /** URL of the WebVTT subtitle track (optional) */
@@ -35,7 +36,10 @@ const AUTOSAVE_INTERVAL_MS  = 30_000; // save every 30 s
 const COMPLETION_THRESHOLD  = 0.95;   // 95 %
 
 // ── Component ─────────────────────────────────────────────────────
-export function VideoPlayer({
+export const VideoPlayer = forwardRef<
+  HTMLVideoElement,
+  VideoPlayerProps
+>(function videoPlayer({
   src,
   captionsUrl,
   enrollmentId,
@@ -46,9 +50,10 @@ export function VideoPlayer({
   autoplay = false,
   onAutoplayChange,
   className = '',
-}: VideoPlayerProps) {
+}, ref) {
   // ── Refs ──────────────────────────────────────────────────────
   const videoRef      = useRef<HTMLVideoElement | null>(null);
+  useImperativeHandle(ref, () => videoRef.current!, [])
   const wrapperRef    = useRef<HTMLDivElement | null>(null);
   const saveTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedRef  = useRef(false);        // fire onComplete only once
@@ -334,4 +339,5 @@ export function VideoPlayer({
       </div>
     </div>
   );
-}
+});
+
