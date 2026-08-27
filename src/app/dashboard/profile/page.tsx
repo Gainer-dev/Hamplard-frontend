@@ -5,20 +5,24 @@ import { useRouter } from 'next/navigation';
 import { User, Mail, Pencil, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { usersApi } from '@/lib/api/services';
+import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { AvatarUpload } from '@/components/ui/AvatarUpload';
 import type { User as UserType } from '@/types';
 
 export default function ProfilePage() {
-  const router = useRouter();
+  const router     = useRouter();
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const authUser   = useAuthStore((s) => s.user);
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [saved,   setSaved]   = useState(false);
 
-  const [me, setMe] = useState<UserType | null>(null);
-  const [name, setName] = useState('');
+  const [me,    setMe]    = useState<UserType | null>(null);
+  const [name,  setName]  = useState('');
   const [email, setEmail] = useState('');
-  const [bio, setBio] = useState('');
+  const [bio,   setBio]   = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -31,18 +35,9 @@ export default function ProfilePage() {
         setEmail(u.email ?? '');
         setBio(u.bio ?? '');
       })
-      .catch((e) => {
-        if (!mounted) return;
-        setError(e?.message ?? 'Failed to load profile');
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+      .catch((e) => { if (mounted) setError(e?.message ?? 'Failed to load profile'); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
   }, []);
 
   const handleSave = async () => {
@@ -50,14 +45,14 @@ export default function ProfilePage() {
     setSaving(true);
     setError(null);
     setSaved(false);
-
     try {
       const updated = await usersApi.updateMe({
-        name: name.trim(),
+        name:  name.trim(),
         email: email.trim() || undefined,
-        bio: bio.trim() || undefined,
+        bio:   bio.trim()   || undefined,
       });
       setMe(updated);
+      updateUser({ name: updated.name, email: updated.email });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e: any) {
@@ -78,6 +73,7 @@ export default function ProfilePage() {
 
   return (
     <div>
+      {/* ── Page header ── */}
       <div className="mb-6">
         <h1 className="section-heading">Profile</h1>
         <p className="text-sm text-ink-500 mt-1">Update your public information.</p>
@@ -90,6 +86,22 @@ export default function ProfilePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+
+        {/* ── Col 1: Avatar upload ── */}
+        <div className="lg:col-span-1">
+          <div className="card p-6 flex flex-col items-center">
+            <p className="mb-4 w-full text-sm font-semibold text-ink-900">Profile photo</p>
+            <AvatarUpload
+              currentAvatarUrl={authUser?.avatarUrl ?? me?.avatarUrl}
+              userName={me?.name}
+              onSaved={(url) =>
+                setMe((prev) => (prev ? { ...prev, avatarUrl: url } : prev))
+              }
+            />
+          </div>
+        </div>
+
+        {/* ── Col 2: Info form ── */}
         <div className="lg:col-span-2">
           <div className="card p-6">
             <div className="flex items-start gap-3 mb-5">
@@ -101,7 +113,9 @@ export default function ProfilePage() {
                 <p className="font-display text-lg font-semibold text-ink-900">
                   {me?.name ?? 'Your name'}
                 </p>
-                <p className="text-xs text-ink-400">Role: {me?.role?.toLowerCase() ?? 'student'}</p>
+                <p className="text-xs text-ink-400">
+                  Role: {me?.role?.toLowerCase() ?? 'student'}
+                </p>
               </div>
             </div>
 
@@ -130,7 +144,9 @@ export default function ProfilePage() {
                     placeholder="name@example.com"
                   />
                 </div>
-                <p className="text-[11px] text-ink-400 mt-1">Used for account messages and verification.</p>
+                <p className="text-[11px] text-ink-400 mt-1">
+                  Used for account messages and verification.
+                </p>
               </label>
 
               <label className="block">
@@ -163,35 +179,29 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="lg:col-span-1">
-          <div className="card p-6">
+          {/* ── Next-steps sidebar (sits below form on this column on lg) ── */}
+          <div className="card p-6 mt-5">
             <p className="text-sm font-semibold text-ink-900">Next steps</p>
             <p className="text-sm text-ink-500 mt-1">
               Keep your profile up to date to improve your course and certificate trust.
             </p>
-
-            <div className="mt-5 space-y-3">
-              <Link
-                href="/dashboard/settings"
-                className="btn-secondary inline-flex w-full justify-center"
-              >
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/dashboard/settings" className="btn-secondary inline-flex">
                 Go to settings
               </Link>
-
               <button
                 type="button"
                 onClick={() => router.refresh()}
-                className="btn-ghost inline-flex w-full justify-center"
+                className="btn-ghost inline-flex"
               >
                 Refresh
               </button>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
 }
-

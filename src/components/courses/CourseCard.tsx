@@ -85,7 +85,7 @@ export function CourseCard({ course, href, showProgress, priority = false }: Pro
           {course.thumbnailUrl ? (
             <Image
               src={course.thumbnailUrl}
-              alt={course.title}
+              alt={`${course.title} course thumbnail`}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
               className="object-cover group-hover:scale-105 transition-transform duration-300"

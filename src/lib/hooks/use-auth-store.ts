@@ -6,10 +6,11 @@ interface AuthState {
   token:       string | null;
   user:        User | null;
   isConnected: boolean;
-  setAuth:    (address: string, token: string, user: User, rememberMe?: boolean) => void;
-  setAddress: (address: string) => void;
-  logout:     () => void;
-  rehydrate:  () => void;
+  setAuth:     (address: string, token: string, user: User, rememberMe?: boolean) => void;
+  setAddress:  (address: string) => void;
+  updateUser:  (patch: Partial<User>) => void;
+  logout:      () => void;
+  rehydrate:   () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -26,6 +27,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setAddress: (address) => set({ address, isConnected: true }),
+
+  updateUser: (patch) =>
+    set((state) => ({ user: state.user ? { ...state.user, ...patch } : state.user })),
 
   logout: () => {
     if (typeof window !== 'undefined') {

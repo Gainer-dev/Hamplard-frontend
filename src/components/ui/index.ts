@@ -4,3 +4,4 @@ export { Breadcrumb } from './Breadcrumb';
 export type { BreadcrumbItem } from './Breadcrumb';
 export { Pagination } from './Pagination';
 export type { PaginationProps } from './Pagination';
+export { AvatarUpload } from './AvatarUpload';

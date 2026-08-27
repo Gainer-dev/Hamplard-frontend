@@ -102,7 +102,7 @@ export default function ReviewsList({ reviews }: ReviewsListProps) {
                     {review.reviewer.avatar ? (
                       <img
                         src={review.reviewer.avatar}
-                        alt={review.reviewer.name}
+                        alt={`${review.reviewer.name} avatar`}
                         className="h-10 w-10 rounded-full object-cover"
                       />
                     ) : (

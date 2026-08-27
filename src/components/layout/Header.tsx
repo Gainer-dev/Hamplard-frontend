@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useCartStore } from '@/lib/hooks/use-cart-store';
 import {
@@ -73,6 +74,11 @@ const NAV_LINKS = [
 export function Header() {
   const { isConnected, user, logout } = useAuthStore();
   const cartCount = useCartStore((s) => s.getItemCount());
+  const pathname = usePathname();
+
+  /** A nav link is current when it matches the route or one of its sub-routes. */
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + '/');
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -82,6 +88,8 @@ export function Header() {
 
   const megaRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLDivElement>(null);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const avatarTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
 
@@ -105,6 +113,60 @@ export function Header() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Keyboard support for the user menu: role="menu" implies arrow-key roving
+  // focus, so items are taken out of the tab sequence and driven from here.
+  useEffect(() => {
+    const menu = avatarMenuRef.current;
+    if (!avatarOpen || !menu) return;
+
+    const getItems = () =>
+      Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+
+    getItems()[0]?.focus();
+
+    function closeAndRestore() {
+      setAvatarOpen(false);
+      avatarTriggerRef.current?.focus();
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      const items = getItems();
+      if (items.length === 0) return;
+      const index = items.indexOf(document.activeElement as HTMLElement);
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          items[(index + 1) % items.length]?.focus();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          items[(index - 1 + items.length) % items.length]?.focus();
+          break;
+        case 'Home':
+          e.preventDefault();
+          items[0]?.focus();
+          break;
+        case 'End':
+          e.preventDefault();
+          items[items.length - 1]?.focus();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          closeAndRestore();
+          break;
+        case 'Tab':
+          // Close and hand focus back to the trigger, letting the browser
+          // continue the tab sequence from there.
+          closeAndRestore();
+          break;
+      }
+    }
+
+    menu.addEventListener('keydown', handleKeyDown);
+    return () => menu.removeEventListener('keydown', handleKeyDown);
+  }, [avatarOpen]);
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -147,6 +209,7 @@ export function Header() {
 
         {/* ── Desktop center: categories mega-menu + search ── */}
         <div className="hidden flex-1 items-center gap-4 md:flex">
+          <nav aria-label="Main navigation" className="flex items-center gap-4">
           {/* Category mega-menu trigger */}
           <div ref={megaRef} className="relative">
             <button
@@ -199,23 +262,31 @@ export function Header() {
             <Link
               key={link.label}
               href={link.href}
+              aria-current={isActive(link.href) ? 'page' : undefined}
               className="rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/10 hover:text-white"
             >
               {link.label}
             </Link>
           ))}
+          </nav>
 
           {/* Search bar */}
           <form
             onSubmit={handleSearch}
+            role="search"
+            aria-label="Course search"
             className="relative ml-auto flex max-w-xs flex-1 items-center"
           >
-            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
+            <Search
+              className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400"
+              aria-hidden="true"
+            />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search courses..."
+              aria-label="Search courses"
               className="w-full rounded-lg border border-white/15 bg-white/10 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-400 transition-colors focus:border-hamplard-primary focus:outline-none focus:ring-1 focus:ring-hamplard-primary"
             />
           </form>
@@ -232,30 +303,51 @@ export function Header() {
               <Link
                 href="/dashboard/courses"
                 className="relative rounded-lg p-2 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-                aria-label={`Shopping cart with ${cartCount} items`}
+                aria-label={
+                  cartCount === 1
+                    ? 'Shopping cart with 1 item'
+                    : `Shopping cart with ${cartCount} items`
+                }
               >
-                <ShoppingCart className="h-5 w-5" />
-                {cartCount > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-saffron-500 text-[10px] font-bold text-white">
-                    {cartCount > 9 ? '9+' : cartCount}
+                <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+                {/*
+                  Count badge doubles as a live region, so it must stay mounted
+                  even at zero — a region that unmounts announces nothing when
+                  it comes back. It is visually hidden instead.
+                */}
+                <span
+                  aria-live="polite"
+                  aria-atomic="true"
+                  className={cn(
+                    'items-center justify-center rounded-full text-[10px] font-bold text-white',
+                    cartCount > 0
+                      ? 'absolute -right-0.5 -top-0.5 flex h-4 w-4 bg-saffron-500'
+                      : 'sr-only',
+                  )}
+                >
+                  <span aria-hidden="true">{cartCount > 9 ? '9+' : cartCount}</span>
+                  <span className="sr-only">
+                    {cartCount === 1 ? '1 item in cart' : `${cartCount} items in cart`}
                   </span>
-                )}
+                </span>
               </Link>
 
               {/* Avatar dropdown */}
               <div ref={avatarRef} className="relative">
                 <button
+                  ref={avatarTriggerRef}
                   type="button"
                   onClick={() => setAvatarOpen((v) => !v)}
                   className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-white/10"
                   aria-expanded={avatarOpen}
-                  aria-haspopup="true"
+                  aria-haspopup="menu"
+                  aria-controls={avatarOpen ? 'user-menu' : undefined}
                   aria-label="User menu"
                 >
                   {user?.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
-                      alt=""
+                      alt={`${user?.name ?? 'User'} avatar`}
                       className="h-8 w-8 rounded-full object-cover ring-2 ring-white/20"
                     />
                   ) : (
@@ -275,36 +367,44 @@ export function Header() {
                         {user?.email ?? user?.stellarAddress ?? ''}
                       </p>
                     </div>
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setAvatarOpen(false)}
-                      className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/90 transition-colors hover:bg-white/10"
-                    >
-                      <User className="h-4 w-4" />
-                      Dashboard
-                    </Link>
-                    <Link
-                      href="/dashboard/certificates"
-                      onClick={() => setAvatarOpen(false)}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/90 transition-colors hover:bg-white/10"
-                    >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 7V4a2 2 0 012-2h8.5L20 7.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2v-3" />
-                        <polyline points="14 2 14 8 20 8" />
-                      </svg>
-                      Certificates
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAvatarOpen(false);
-                        logout();
-                      }}
-                      className="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-white/10 px-3 py-2 text-sm text-rose-400 transition-colors hover:bg-white/10"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Log out
-                    </button>
+                    <div ref={avatarMenuRef} id="user-menu" role="menu" aria-label="User menu">
+                      <Link
+                        href="/dashboard"
+                        role="menuitem"
+                        tabIndex={-1}
+                        onClick={() => setAvatarOpen(false)}
+                        className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/90 transition-colors hover:bg-white/10"
+                      >
+                        <User className="h-4 w-4" aria-hidden="true" />
+                        Dashboard
+                      </Link>
+                      <Link
+                        href="/dashboard/certificates"
+                        role="menuitem"
+                        tabIndex={-1}
+                        onClick={() => setAvatarOpen(false)}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/90 transition-colors hover:bg-white/10"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M4 7V4a2 2 0 012-2h8.5L20 7.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2v-3" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        Certificates
+                      </Link>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        tabIndex={-1}
+                        onClick={() => {
+                          setAvatarOpen(false);
+                          logout();
+                        }}
+                        className="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-white/10 px-3 py-2 text-sm text-rose-400 transition-colors hover:bg-white/10"
+                      >
+                        <LogOut className="h-4 w-4" aria-hidden="true" />
+                        Log out
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -375,13 +475,22 @@ export function Header() {
           </div>
           <div className="space-y-1 px-4 pb-6 pt-4">
             {/* Mobile search */}
-            <form onSubmit={handleSearch} className="relative mb-4">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <form
+              onSubmit={handleSearch}
+              role="search"
+              aria-label="Course search"
+              className="relative mb-4"
+            >
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search courses..."
+                aria-label="Search courses"
                 className="w-full rounded-lg border border-white/15 bg-white/10 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-slate-400 focus:border-hamplard-primary focus:outline-none focus:ring-1 focus:ring-hamplard-primary"
               />
             </form>
@@ -408,6 +517,7 @@ export function Header() {
               <Link
                 key={link.label}
                 href={link.href}
+                aria-current={isActive(link.href) ? 'page' : undefined}
                 onClick={() => setMobileOpen(false)}
                 className="block rounded-lg px-3 py-2.5 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
               >
@@ -441,13 +551,23 @@ export function Header() {
                   onClick={() => setMobileOpen(false)}
                   className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors hover:bg-white/10"
                 >
-                  <ShoppingCart className="h-4 w-4" />
+                  <ShoppingCart className="h-4 w-4" aria-hidden="true" />
                   Cart
-                  {cartCount > 0 && (
-                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-saffron-500 text-xs font-bold text-white">
-                      {cartCount}
+                  <span
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className={cn(
+                      'items-center justify-center rounded-full text-xs font-bold text-white',
+                      cartCount > 0
+                        ? 'ml-auto flex h-5 w-5 bg-saffron-500'
+                        : 'sr-only',
+                    )}
+                  >
+                    <span aria-hidden="true">{cartCount}</span>
+                    <span className="sr-only">
+                      {cartCount === 1 ? '1 item in cart' : `${cartCount} items in cart`}
                     </span>
-                  )}
+                  </span>
                 </Link>
                 <button
                   type="button"

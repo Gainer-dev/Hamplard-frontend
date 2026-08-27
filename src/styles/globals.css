@@ -188,6 +188,8 @@
   .progress-fill {
     @apply h-full bg-saffron-500 rounded-full transition-all duration-700;
   }
+
+  /* Section heading with display font */
   .section-heading {
     color: var(--color-text-heading);
     font-family: var(--type-h3-family);
@@ -198,6 +200,13 @@
   }
   .course-grid {
     @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

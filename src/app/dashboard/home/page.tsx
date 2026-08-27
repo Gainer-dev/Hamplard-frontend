@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import StudentDashboard from '@/components/dashboard/StudentDashboard';
+import { OnboardingModal } from '@/components/dashboard/OnboardingModal';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import {
   QuickStatsSkeleton,
@@ -65,6 +66,9 @@ export default function DashboardHomePage() {
 
   return (
     <div>
+      {/* Onboarding Modal */}
+      <OnboardingModal />
+
       {/* Stats section — skeleton until data arrives */}
       {loadingStats ? (
         <div className="mb-6">

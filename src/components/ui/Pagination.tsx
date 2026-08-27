@@ -1,76 +1,111 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  /** Optional class applied to the root wrapper. */
+  /** Current page number (1-based). If omitted, synced with URL parameter. */
+  currentPage?: number;
+  /** Total number of pages. Takes precedence over totalItems. */
+  totalPages?: number;
+  /** Total count of items across all pages. Used to calculate totalPages if not directly provided. */
+  totalItems?: number;
+  /** Number of items per page. Defaults to 10 when calculating totalPages from totalItems. */
+  itemsPerPage?: number;
+  /** Optional callback fired when the page changes. */
+  onPageChange?: (page: number) => void;
+  /** Search parameter key used for URL synchronization. Defaults to 'page'. */
+  paramName?: string;
+  /** Whether to automatically sync page changes with the URL search params. Defaults to true. */
+  updateUrl?: boolean;
+  /** Optional additional class names for the root container. */
   className?: string;
 }
 
 /**
- * Builds the array of items to render in the pagination bar.
- * Returns page numbers and null values (representing "…" ellipsis).
- *
- * Strategy:
- *  - Always show the first and last page.
- *  - Show up to 3 pages around the current page.
- *  - Insert an ellipsis wherever there is a gap > 1.
+ * Builds array of page items to render in pagination bar.
+ * Returns page numbers and 'ellipsis' string placeholders.
  */
-function buildPageItems(currentPage: number, totalPages: number): (number | null)[] {
+function buildPageItems(currentPage: number, totalPages: number): (number | 'ellipsis')[] {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
 
-  const pages = new Set<number>([1, totalPages]);
-
-  for (let offset = -2; offset <= 2; offset++) {
-    const p = currentPage + offset;
-    if (p > 1 && p < totalPages) pages.add(p);
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, 'ellipsis', totalPages];
   }
 
-  const sorted = Array.from(pages).sort((a, b) => a - b);
-
-  const items: (number | null)[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    items.push(sorted[i]);
-    if (i < sorted.length - 1 && sorted[i + 1] - sorted[i] > 1) {
-      items.push(null); // ellipsis placeholder
-    }
+  if (currentPage >= totalPages - 3) {
+    return [1, 'ellipsis', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
   }
 
-  return items;
+  return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages];
 }
 
-export function Pagination({ currentPage, totalPages, onPageChange, className }: PaginationProps) {
+export function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage = 10,
+  onPageChange,
+  paramName = 'page',
+  updateUrl = true,
+  className,
+}: PaginationProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Determine effective active page from prop or URL
+  const urlParamValue = searchParams?.get(paramName);
+  const parsedUrlPage = urlParamValue ? parseInt(urlParamValue, 10) : 1;
+  const activePage = currentPage ?? (isNaN(parsedUrlPage) || parsedUrlPage < 1 ? 1 : parsedUrlPage);
+
+  // Determine effective total pages
+  const finalTotalPages =
+    totalPages ?? (totalItems !== undefined && itemsPerPage > 0 ? Math.ceil(totalItems / itemsPerPage) : 0);
+
   const pageButtonRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const hasMounted = useRef(false);
 
-  // Re-focus the active page button after a page change so keyboard users don't
-  // lose their position. Skip the very first render to avoid stealing page focus.
+  // Focus management for keyboard accessibility on page change
   useEffect(() => {
     if (!hasMounted.current) {
       hasMounted.current = true;
       return;
     }
-    pageButtonRefs.current.get(currentPage)?.focus();
-  }, [currentPage]);
+    pageButtonRefs.current.get(activePage)?.focus();
+  }, [activePage]);
 
-  if (totalPages <= 1) return null;
+  if (finalTotalPages <= 1) return null;
 
-  const items = buildPageItems(currentPage, totalPages);
+  const items = buildPageItems(activePage, finalTotalPages);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > finalTotalPages || newPage === activePage) return;
+
+    if (onPageChange) {
+      onPageChange(newPage);
+    }
+
+    if (updateUrl && router && pathname) {
+      const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
+      params.set(paramName, String(newPage));
+      const queryString = params.toString();
+      const targetUrl = queryString ? `${pathname}?${queryString}` : pathname;
+      router.push(targetUrl, { scroll: false });
+    }
+  };
 
   function handleArrowKey(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'ArrowLeft' && currentPage > 1) {
+    if (e.key === 'ArrowLeft' && activePage > 1) {
       e.preventDefault();
-      onPageChange(currentPage - 1);
-    } else if (e.key === 'ArrowRight' && currentPage < totalPages) {
+      handlePageChange(activePage - 1);
+    } else if (e.key === 'ArrowRight' && activePage < finalTotalPages) {
       e.preventDefault();
-      onPageChange(currentPage + 1);
+      handlePageChange(activePage + 1);
     }
   }
 
@@ -83,8 +118,8 @@ export function Pagination({ currentPage, totalPages, onPageChange, className }:
       {/* ── Previous ── */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1}
+        onClick={() => handlePageChange(activePage - 1)}
+        disabled={activePage <= 1}
         aria-label="Go to previous page"
         className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
@@ -93,13 +128,13 @@ export function Pagination({ currentPage, totalPages, onPageChange, className }:
 
       {/* ── Mobile label ── */}
       <span className="sm:hidden px-3 py-1.5 text-sm text-ink-600">
-        Page {currentPage} of {totalPages}
+        Page {activePage} of {finalTotalPages}
       </span>
 
       {/* ── Page buttons (hidden on mobile) ── */}
       <div className="hidden sm:contents" role="group" aria-label="Page numbers">
         {items.map((item, idx) =>
-          item === null ? (
+          item === 'ellipsis' ? (
             <span
               key={`ellipsis-${idx}`}
               className="flex h-9 w-9 items-center justify-center text-sm text-ink-400"
@@ -115,13 +150,13 @@ export function Pagination({ currentPage, totalPages, onPageChange, className }:
                 else pageButtonRefs.current.delete(item);
               }}
               type="button"
-              onClick={() => onPageChange(item)}
+              onClick={() => handlePageChange(item)}
               aria-label={`Page ${item}`}
-              aria-current={item === currentPage ? 'page' : undefined}
+              aria-current={item === activePage ? 'page' : undefined}
               className={cn(
                 'inline-flex h-9 w-9 items-center justify-center rounded-xl text-sm font-medium transition-all',
-                item === currentPage
-                  ? 'bg-hamplard-primary text-white shadow-sm'
+                item === activePage
+                  ? 'bg-[#7F77DD] text-white shadow-sm font-semibold'
                   : 'border border-ink-200 text-ink-600 hover:bg-ink-50',
               )}
             >
@@ -134,8 +169,8 @@ export function Pagination({ currentPage, totalPages, onPageChange, className }:
       {/* ── Next ── */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages}
+        onClick={() => handlePageChange(activePage + 1)}
+        disabled={activePage >= finalTotalPages}
         aria-label="Go to next page"
         className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-ink-200 text-ink-600 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40"
       >

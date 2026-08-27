@@ -2,27 +2,69 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, X, ArrowRight } from 'lucide-react';
+import { ShoppingBag, X, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '@/lib/hooks/use-cart-store';
+import { promoCodesApi } from '@/lib/api/services';
 import { Button } from '@/components/ui/Button';
 import { formatUsdc } from '@/lib/utils';
+import { CheckoutErrorBoundary } from './CheckoutErrorBoundary';
 
 interface ShoppingCartProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
+function ShoppingCartContent({ isOpen = true, onClose }: ShoppingCartProps) {
   const { items, removeItem, clearCart, getTotalPrice } = useCartStore();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
 
   const totalPrice = getTotalPrice();
   const itemCount = items.length;
+  const discountAmount = appliedPromo
+    ? appliedPromo.discountType === 'PERCENTAGE'
+      ? (totalPrice * appliedPromo.discountValue) / 100
+      : appliedPromo.discountValue
+    : 0;
+  const finalPrice = Math.max(0, totalPrice - discountAmount);
 
   const handleCheckout = async () => {
     setIsCheckingOut(true);
     await new Promise((resolve) => setTimeout(resolve, 1500));
     setIsCheckingOut(false);
+  };
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) {
+      setPromoError('Enter a promo code');
+      return;
+    }
+
+    setIsValidatingPromo(true);
+    setPromoError(null);
+
+    try {
+      // Validate promo code - using first course ID for validation
+      if (items.length === 0) return;
+      
+      const result = await promoCodesApi.validate(promoCode.toUpperCase(), items[0].courseId);
+      setAppliedPromo(result);
+      setPromoCode('');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid promo code';
+      setPromoError(message);
+    } finally {
+      setIsValidatingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoCode('');
+    setPromoError(null);
   };
 
   if (!isOpen) return null;
@@ -77,7 +119,7 @@ export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
                 {item.course.thumbnailUrl ? (
                   <img
                     src={item.course.thumbnailUrl}
-                    alt={item.course.title}
+                    alt={`${item.course.title} course thumbnail`}
                     className="w-16 h-16 object-cover rounded-md flex-shrink-0"
                   />
                 ) : (
@@ -119,12 +161,76 @@ export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
       {/* Footer */}
       {itemCount > 0 && (
         <div className="border-t border-ink-100 bg-gray-50 p-4 space-y-3">
+          {/* Promo Code Section */}
+          {!appliedPromo ? (
+            <div className="bg-white rounded-lg p-3 border border-ink-100">
+              <label htmlFor="promo-code" className="text-xs font-medium text-ink-600 block mb-2">
+                Have a promo code?
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="promo-code"
+                  type="text"
+                  placeholder="Enter code"
+                  value={promoCode}
+                  onChange={(e) => {
+                    setPromoCode(e.target.value.toUpperCase());
+                    setPromoError(null);
+                  }}
+                  className="flex-1 px-3 py-2 text-sm border border-ink-200 rounded-lg focus:ring-2 focus:ring-hamplard-primary focus:border-transparent"
+                  disabled={isValidatingPromo}
+                />
+                <button
+                  onClick={handleApplyPromo}
+                  disabled={isValidatingPromo || !promoCode.trim()}
+                  className="px-3 py-2 text-sm font-medium bg-hamplard-primary text-white rounded-lg hover:bg-hamplard-mid disabled:bg-ink-200 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isValidatingPromo ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    'Apply'
+                  )}
+                </button>
+              </div>
+              {promoError && (
+                <p className="text-xs text-rose-600 mt-2 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {promoError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-emerald-900">
+                  ✓ Promo applied: <code className="font-mono font-semibold">{appliedPromo.code}</code>
+                </p>
+                <p className="text-xs text-emerald-700 mt-1">
+                  Saving {formatUsdc(discountAmount)}
+                </p>
+              </div>
+              <button
+                onClick={handleRemovePromo}
+                className="p-1 hover:bg-emerald-100 rounded transition-colors"
+                aria-label="Remove promo code"
+              >
+                <X className="w-4 h-4 text-emerald-700" />
+              </button>
+            </div>
+          )}
+
           {/* Summary */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-600">Subtotal ({itemCount} course{itemCount !== 1 ? 's' : ''})</span>
               <span className="font-semibold text-ink-900">{formatUsdc(totalPrice)}</span>
             </div>
+            {appliedPromo && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-emerald-700">Discount</span>
+                <span className="font-semibold text-emerald-700">-{formatUsdc(discountAmount)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-600">Platform fee</span>
               <span className="text-ink-500">Calculated at checkout</span>
@@ -135,7 +241,7 @@ export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
           <div className="pt-2 border-t border-ink-200">
             <div className="flex items-center justify-between mb-3">
               <span className="text-base font-semibold text-ink-900">Total</span>
-              <span className="text-xl font-bold text-hamplard-primary">{formatUsdc(totalPrice)}</span>
+              <span className="text-xl font-bold text-hamplard-primary">{formatUsdc(finalPrice)}</span>
             </div>
 
             {/* Action Buttons */}
@@ -162,5 +268,13 @@ export function ShoppingCart({ isOpen = true, onClose }: ShoppingCartProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export function ShoppingCart(props: ShoppingCartProps) {
+  return (
+    <CheckoutErrorBoundary>
+      <ShoppingCartContent {...props} />
+    </CheckoutErrorBoundary>
   );
 }

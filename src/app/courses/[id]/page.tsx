@@ -140,6 +140,6 @@ export default async function CoursePage({ params }: Props) {
           </aside>
         </div>
       </div>
-    </div>
+    </>
   );
 }

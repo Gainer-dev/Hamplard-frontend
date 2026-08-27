@@ -27,7 +27,7 @@ interface NavItem {
 }
 
 const STUDENT_NAV: NavItem[] = [
-  { href: '/dashboard/courses',     label: 'My Courses',     icon: BookOpen },
+  { href: '/dashboard/my-courses',  label: 'My Courses',     icon: BookOpen },
   { href: '/dashboard/wishlist',    label: 'Wishlist',       icon: Heart, showWishlistCount: true },
   { href: '/dashboard/certificates',label: 'Certificates',   icon: Award },
   { href: '/dashboard/profile',    label: 'Profile',        icon: User },

@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { coursesApi } from '@/lib/api/services';
 import { CourseCard } from '@/components/courses/CourseCard';
-import { CourseCardSkeleton } from '@/components/courses/CourseCardSkeleton';
+import { CourseCardSkeleton } from '@/components/skeletons';
 import { FilterSidebar } from '@/components/courses/FilterSidebar';
 import { Pagination } from '@/components/ui/Pagination';
 import { useInfiniteScroll } from '@/lib/hooks/useInfiniteScroll';
@@ -78,6 +78,8 @@ function CourseBrowsePageContent() {
   const urlCategory = searchParams.get('category') ?? '';
   const urlLevel    = searchParams.get('level')    ?? '';
   const urlPrice    = searchParams.get('price')    ?? '';
+  const urlRating   = searchParams.get('rating')   ?? '';
+  const urlDuration = searchParams.get('duration') ?? '';
   const urlSort     = searchParams.get('sort')     ?? 'relevant';
   const urlSearch   = searchParams.get('search')   ?? '';
 
@@ -90,14 +92,14 @@ function CourseBrowsePageContent() {
   const [loadingMore, setLoadingMore] = useState(false);  // subsequent pages
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Push filter changes to URL (no page param needed — infinite scroll handles paging)
-  const pushParams = useCallback((updates: Record<string, string>) => {
+  // Sync filter changes to URL using router.replace (prevents polluting history stack)
+  const updateParams = useCallback((updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([k, v]) => {
       if (v) { params.set(k, v); }
       else   { params.delete(k); }
     });
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [router, pathname, searchParams]);
 
   // Fetch categories once
@@ -125,35 +127,51 @@ function CourseBrowsePageContent() {
         return true;
       });
     }
+    if (urlRating) {
+      const minRating = Number(urlRating);
+      if (!isNaN(minRating)) {
+        sorted = sorted.filter((c) => (c.rating ?? 0) >= minRating);
+      }
+    }
     return sorted;
-  }, [urlSort, urlPrice]);
+  }, [urlSort, urlPrice, urlRating]);
 
-  // Reset + fetch page 1 whenever filters change
+  // Initial / filter change fetch
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setPage(1);
-    setHasMore(true);
-    setCourses([]);
 
-    coursesApi
-      .list({
-        search:   urlSearch   || undefined,
-        category: urlCategory || undefined,
-        level:    urlLevel    || undefined,
-        page:     1,
-        limit:    PAGE_SIZE,
-      })
+    coursesApi.list({
+      category: urlCategory || undefined,
+      level:    urlLevel    || undefined,
+      search:   urlSearch   || undefined,
+      page: 1,
+      limit: PAGE_SIZE,
+    })
       .then((res) => {
-        const filtered = applyClientFilters(res.data);
+        if (cancelled) return;
+        const filtered = applyClientFilters(res.courses);
         setCourses(filtered);
-        setTotal(res.meta?.total ?? res.data.length);
-        setHasMore(res.data.length >= PAGE_SIZE);
+        setTotal(res.total);
+        setHasMore(res.courses.length === PAGE_SIZE && filtered.length < res.total);
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  // applyClientFilters changes when sort/price change, which correctly resets the list
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlSearch, urlCategory, urlLevel, applyClientFilters]);
+      .catch(() => {
+        if (cancelled) return;
+        setCourses([]);
+        setTotal(0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [urlCategory, urlLevel, urlSearch, applyClientFilters]);
+
+  // Read current page from URL parameter
+  const urlPageParam = searchParams.get('page');
+  const urlPage = urlPageParam ? parseInt(urlPageParam, 10) : 1;
+  const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
 
   // Load next page and append
   const fetchNextPage = useCallback(async () => {
@@ -197,18 +215,25 @@ function CourseBrowsePageContent() {
 
   // Active filter chips
   const activeChips: { label: string; clear: () => void }[] = [];
-  if (urlSearch)   activeChips.push({ label: `"${urlSearch}"`,   clear: () => pushParams({ search: '' }) });
-  if (urlCategory) activeChips.push({ label: urlCategory,        clear: () => pushParams({ category: '' }) });
-  if (urlLevel)    activeChips.push({ label: urlLevel,           clear: () => pushParams({ level: '' }) });
+  if (urlSearch)   activeChips.push({ label: `"${urlSearch}"`,   clear: () => updateParams({ search: '' }) });
+  if (urlCategory) activeChips.push({ label: urlCategory,        clear: () => updateParams({ category: '' }) });
+  if (urlLevel)    activeChips.push({ label: urlLevel,           clear: () => updateParams({ level: '' }) });
   if (urlPrice) {
     const priceLabel =
       { free: 'Free', under20: 'Under $20', '20to50': '$20–$50', over50: 'Over $50' }[urlPrice] ??
       urlPrice;
-    activeChips.push({ label: priceLabel, clear: () => pushParams({ price: '' }) });
+    activeChips.push({ label: priceLabel, clear: () => updateParams({ price: '' }) });
+  }
+  if (urlRating) {
+    activeChips.push({ label: `★ ${urlRating} & up`, clear: () => updateParams({ rating: '' }) });
+  }
+  if (urlDuration) {
+    const durationLabel = { short: '0–2h', medium: '3–6h', long: '7h+' }[urlDuration] ?? urlDuration;
+    activeChips.push({ label: durationLabel, clear: () => updateParams({ duration: '' }) });
   }
 
   const clearAll = () =>
-    pushParams({ search: '', category: '', level: '', price: '', sort: '' });
+    updateParams({ search: '', category: '', level: '', price: '', rating: '', duration: '', sort: '' });
 
   return (
     <div className="min-h-screen bg-ink-50">
@@ -228,7 +253,7 @@ function CourseBrowsePageContent() {
             onSubmit={(e) => {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
-              pushParams({ search: (fd.get('q') as string) ?? '' });
+              updateParams({ search: (fd.get('q') as string) ?? '' });
             }}
             className="flex gap-2 max-w-lg"
           >
@@ -255,9 +280,13 @@ function CourseBrowsePageContent() {
             activeCategory={urlCategory}
             activeLevel={urlLevel}
             activePrice={urlPrice}
-            onCategory={(v) => pushParams({ category: v })}
-            onLevel={(v)    => pushParams({ level: v })}
-            onPrice={(v)    => pushParams({ price: v })}
+            activeRating={urlRating}
+            activeDuration={urlDuration}
+            onCategory={(v) => updateParams({ category: v })}
+            onLevel={(v)    => updateParams({ level: v })}
+            onPrice={(v)    => updateParams({ price: v })}
+            onRating={(v)   => updateParams({ rating: v })}
+            onDuration={(v) => updateParams({ duration: v })}
             onClearAll={clearAll}
           />
 
@@ -297,7 +326,7 @@ function CourseBrowsePageContent() {
               {/* Sort dropdown */}
               <select
                 value={urlSort}
-                onChange={(e) => pushParams({ sort: e.target.value })}
+                onChange={(e) => updateParams({ sort: e.target.value })}
                 className="select w-auto text-sm"
                 aria-label="Sort courses"
               >
@@ -324,9 +353,9 @@ function CourseBrowsePageContent() {
 
             {/* ── Course grid ── */}
             {loading ? (
-              /* First-page skeleton — full grid */
+              /* First-page skeleton — 4-column grid of 8 cards */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                {Array.from({ length: 8 }).map((_, i) => (
                   <CourseCardSkeleton key={i} />
                 ))}
               </div>
@@ -356,7 +385,7 @@ function CourseBrowsePageContent() {
             <Pagination
               currentPage={urlPage}
               totalPages={totalPages}
-              onPageChange={p => pushParams({ page: String(p) })}
+              onPageChange={p => updateParams({ page: String(p) })}
               className="mt-10"
             />
               <>

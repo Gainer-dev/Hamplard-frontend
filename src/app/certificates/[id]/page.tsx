@@ -3,6 +3,9 @@ import { certificatesApi } from '@/lib/api/services';
 import { formatDate, shortAddress } from '@/lib/utils';
 import { Award, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import { SocialShare } from '@/components/ui/SocialShare';
+
+const DEFAULT_OG_IMAGE = '/hamplard-og.svg';
 
 const DEFAULT_OG_IMAGE = '/hamplard-og.svg';
 

@@ -247,3 +247,65 @@ export interface QnaQuestion {
   viewerUpvoted?: boolean;
   replies: QnaReply[];
 }
+
+// ── Bundles ───────────────────────────────────────────────────────────────
+
+export interface Bundle {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  totalValue: number;       // sum of individual course prices
+  bundlePrice: number;      // discounted price
+  courses: Course[];
+  relatedBundles?: BundleSummary[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BundleSummary {
+  id: string;
+  slug: string;
+  title: string;
+  thumbnailUrl: string | null;
+  bundlePrice: number;
+  totalValue: number;
+  courseCount: number;
+}
+
+// ── Instructor Student Analytics ─────────────────────────────────────────
+
+export interface StudentEnrollmentRow {
+  studentId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  studentAvatarUrl: string | null;
+  courseId: string;
+  courseTitle: string;
+  enrolledAt: string;
+  progressPercent: number;
+  lastActiveAt: string | null;
+}
+
+export interface LessonProgressDetail {
+  lessonId: string;
+  lessonTitle: string;
+  completed: boolean;
+  watchedSecs: number;
+  completedAt: string | null;
+}
+
+export interface StudentDetail {
+  studentId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  studentAvatarUrl: string | null;
+  enrollments: Array<{
+    courseId: string;
+    courseTitle: string;
+    enrolledAt: string;
+    progressPercent: number;
+    lessonProgress: LessonProgressDetail[];
+  }>;
+}

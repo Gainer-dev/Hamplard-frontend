@@ -142,7 +142,7 @@ export function ReviewCard({ review, defaultExpanded = false, className }: Revie
         {review.authorAvatarUrl ? (
           <img
             src={review.authorAvatarUrl}
-            alt={review.authorName}
+            alt={`${review.authorName} avatar`}
             className="w-9 h-9 rounded-full object-cover shrink-0"
           />
         ) : (
@@ -202,7 +202,7 @@ export function ReviewCard({ review, defaultExpanded = false, className }: Revie
             {review.instructorReply!.avatarUrl ? (
               <img
                 src={review.instructorReply!.avatarUrl}
-                alt={review.instructorReply!.name}
+                alt={`${review.instructorReply!.name} avatar`}
                 className="w-7 h-7 rounded-full object-cover shrink-0"
               />
             ) : (

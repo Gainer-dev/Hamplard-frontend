@@ -6,6 +6,7 @@ import { Award, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
 import { certificatesApi } from '@/lib/api/services';
 import { formatDate, shortAddress, copyToClipboard } from '@/lib/utils';
 import type { Certificate } from '@/types';
+import { SocialShare } from '@/components/ui/SocialShare';
 
 export default function CertificatesPage() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -80,23 +81,31 @@ export default function CertificatesPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => handleCopy(cert.id)}
-                      className="btn-secondary text-xs"
-                    >
-                      {copied === cert.id
-                        ? <><CheckCircle2 className="w-3.5 h-3.5 text-leaf-500" />Copied!</>
-                        : <><Copy className="w-3.5 h-3.5" />Copy verification link</>
-                      }
-                    </button>
-                    <Link
-                      href={`/certificates/${cert.id}`}
-                      className="btn-ghost text-xs"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      View certificate
-                    </Link>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleCopy(cert.id)}
+                        className="btn-secondary text-xs"
+                      >
+                        {copied === cert.id
+                          ? <><CheckCircle2 className="w-3.5 h-3.5 text-leaf-500" />Copied!</>
+                          : <><Copy className="w-3.5 h-3.5" />Copy verification link</>
+                        }
+                      </button>
+                      <Link
+                        href={`/certificates/${cert.id}`}
+                        className="btn-ghost text-xs"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View certificate
+                      </Link>
+                    </div>
+                    <SocialShare
+                      courseTitle={cert.courseTitle}
+                      variant="icon"
+                      size="sm"
+                      className="flex gap-2"
+                    />
                   </div>
                 </div>
               </div>

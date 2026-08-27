@@ -12,25 +12,42 @@ const PRICES  = [
   { label: 'Over $50',    value: 'over50'  },
 ];
 
+const RATINGS = [
+  { label: '4.5 & up',   value: '4.5' },
+  { label: '4.0 & up',   value: '4.0' },
+  { label: '3.5 & up',   value: '3.5' },
+];
+
+const DURATIONS = [
+  { label: '0–2 hours',  value: 'short'  },
+  { label: '3–6 hours',  value: 'medium' },
+  { label: '7+ hours',   value: 'long'   },
+];
+
 interface Props {
-  open:          boolean;
-  onClose:       () => void;
-  categories:    Category[];
-  activeCategory:string;
-  activeLevel:   string;
-  activePrice:   string;
-  onCategory:    (v: string) => void;
-  onLevel:       (v: string) => void;
-  onPrice:       (v: string) => void;
-  onClearAll:    () => void;
+  open:           boolean;
+  onClose:        () => void;
+  categories:     Category[];
+  activeCategory: string;
+  activeLevel:    string;
+  activePrice:    string;
+  activeRating?:   string;
+  activeDuration?: string;
+  onCategory:     (v: string) => void;
+  onLevel:        (v: string) => void;
+  onPrice:        (v: string) => void;
+  onRating?:      (v: string) => void;
+  onDuration?:    (v: string) => void;
+  onClearAll:     () => void;
 }
 
 export function FilterSidebar({
   open, onClose, categories,
   activeCategory, activeLevel, activePrice,
-  onCategory, onLevel, onPrice, onClearAll,
+  activeRating = '', activeDuration = '',
+  onCategory, onLevel, onPrice, onRating, onDuration, onClearAll,
 }: Props) {
-  const hasFilters = !!(activeCategory || activeLevel || activePrice);
+  const hasFilters = !!(activeCategory || activeLevel || activePrice || activeRating || activeDuration);
 
   const content = (
     <div className="flex flex-col h-full">
@@ -137,6 +154,56 @@ export function FilterSidebar({
           ))}
         </div>
       </div>
+
+      {/* Rating */}
+      {onRating && (
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">
+            Rating
+          </p>
+          <div className="space-y-1">
+            {RATINGS.map(r => (
+              <button
+                key={r.value}
+                onClick={() => onRating(activeRating === r.value ? '' : r.value)}
+                className={cn(
+                  'w-full text-left px-3 py-2 rounded-xl text-sm transition-colors',
+                  activeRating === r.value
+                    ? 'bg-saffron-50 text-saffron-700 font-medium'
+                    : 'text-ink-600 hover:bg-ink-50',
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Duration */}
+      {onDuration && (
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">
+            Duration
+          </p>
+          <div className="space-y-1">
+            {DURATIONS.map(d => (
+              <button
+                key={d.value}
+                onClick={() => onDuration(activeDuration === d.value ? '' : d.value)}
+                className={cn(
+                  'w-full text-left px-3 py-2 rounded-xl text-sm transition-colors',
+                  activeDuration === d.value
+                    ? 'bg-saffron-50 text-saffron-700 font-medium'
+                    : 'text-ink-600 hover:bg-ink-50',
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
