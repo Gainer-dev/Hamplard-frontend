@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useWishlistCount } from '@/lib/hooks/use-wishlist-store';
 import { shortAddress, cn } from '@/lib/utils';
+import { ProfileCompletion } from '@/components/dashboard/ProfileCompletion';
 
 interface NavItem {
   href:  string;
@@ -114,6 +115,11 @@ export function Sidebar() {
           <LogOut className="w-4 h-4" />
           Sign out
         </button>
+
+        {/* Profile Completion for Students */}
+        {user && user.role === 'STUDENT' && (
+          <ProfileCompletion variant="sidebar" className="mt-0 pt-4 px-0 border-t" />
+        )}
       </div>
     </aside>
   );

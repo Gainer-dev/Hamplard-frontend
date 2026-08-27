@@ -75,6 +75,6 @@ All tests are designed to run in CI without real API calls, ensuring reliable an
 
 ---
 
-**Closes #138**
+**Closes #122**
 
 Updated: Added comprehensive test coverage for course enrollment flow.
