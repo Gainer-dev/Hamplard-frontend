@@ -20,6 +20,7 @@ export const siteConfig = {
 export const DISALLOWED_PATHS = [
   '/dashboard',
   '/notifications',
+  '/auth',
   '/components-demo',
   '/api',
 ];

@@ -9,6 +9,7 @@ import {
 } from '@/lib/utils';
 import { useIsWishlisted, useWishlistStore } from '@/lib/hooks/use-wishlist-store';
 import { useCompareStore } from '@/lib/hooks/use-compare-store';
+import { useHoverPrefetch } from '@/lib/hooks/useHoverPrefetch';
 import type { Course } from '@/types';
 
 // A 1×1 purple-toned blurred placeholder encoded as a base64 data URL.
@@ -36,6 +37,10 @@ export function CourseCard({ course, href, showProgress, priority = false }: Pro
   const dest = href ?? `/dashboard/courses/${course.id}`;
   const mins = courseTotalMins(course.totalDuration ?? 0);
 
+  // Warm the router cache for the course page once the pointer has rested
+  // on the card for 200ms (skipped on touch devices, cancelled on early exit).
+  const hoverPrefetch = useHoverPrefetch(dest);
+
   const isWishlisted  = useIsWishlisted(course.id);
   const toggleWishlistId = useWishlistStore((state) => state.toggle);
   const isComparing = useCompareStore((state) => state.isComparing(course.id));
@@ -54,6 +59,7 @@ export function CourseCard({ course, href, showProgress, priority = false }: Pro
 
   function handleMouseEnter() {
     setIsHovered(true);
+    hoverPrefetch.onMouseEnter();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => setShowPreview(true), 200);
   }
@@ -61,6 +67,7 @@ export function CourseCard({ course, href, showProgress, priority = false }: Pro
   function handleMouseLeave() {
     setIsHovered(false);
     setShowPreview(false);
+    hoverPrefetch.onMouseLeave();
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
   }
 
