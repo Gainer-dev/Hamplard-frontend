@@ -47,6 +47,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+      </head>
       <body>
         {/* Skip navigation — first focusable element for keyboard users */}
         <a
