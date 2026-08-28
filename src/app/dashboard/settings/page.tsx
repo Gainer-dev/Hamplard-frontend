@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, Shield, Save, Loader2 } from 'lucide-react';
+import { Bell, Shield, Save, Loader2, Zap } from 'lucide-react';
 import { Breadcrumb } from '@/components/ui';
 import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup';
 import { twoFactorApi } from '@/lib/api/services';
@@ -16,6 +16,9 @@ export default function SettingsPage() {
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [courseUpdates, setCourseUpdates] = useState(true);
   const [securityAlerts, setSecurityAlerts] = useState(true);
+
+  const { prefersReducedMotion, setManualOverride, clearManualOverride, hasManualOverride, mounted } = useReducedMotion();
+  const [localReducedMotion, setLocalReducedMotion] = useState(false);
 
   useEffect(() => {
     // Load 2FA status
@@ -32,6 +35,27 @@ export default function SettingsPage() {
     loadTwoFactorStatus();
     setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      setLocalReducedMotion(prefersReducedMotion);
+    }
+  }, [mounted, prefersReducedMotion]);
+
+  const handleReducedMotionChange = (enabled: boolean) => {
+    setLocalReducedMotion(enabled);
+    if (enabled) {
+      setManualOverride(true);
+      // Apply class to html element for JavaScript-based checks
+      document.documentElement.classList.add('reduce-motion');
+      document.documentElement.setAttribute('data-reduce-motion', 'true');
+    } else {
+      clearManualOverride();
+      // Remove class from html element
+      document.documentElement.classList.remove('reduce-motion');
+      document.documentElement.removeAttribute('data-reduce-motion');
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -66,7 +90,7 @@ export default function SettingsPage() {
           className="mb-3"
         />
         <h1 className="section-heading">Settings</h1>
-        <p className="text-sm text-ink-500 mt-1">Notification and security preferences.</p>
+        <p className="text-sm text-ink-500 mt-1">Notification, accessibility, and security preferences.</p>
       </div>
 
       {error && (
@@ -74,6 +98,7 @@ export default function SettingsPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Notifications Section */}
         <section className="card p-6">
           <div className="flex items-center gap-2 mb-3">
             <Bell className="w-4 h-4 text-saffron-600" />
@@ -109,6 +134,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Security Section */}
         <section className="card p-6">
           <div className="flex items-center gap-2 mb-3">
             <Shield className="w-4 h-4 text-saffron-600" />
