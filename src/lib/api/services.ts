@@ -111,6 +111,10 @@ export const coursesApi = {
     return data.data;
   },
 
+  remove: async (id: string): Promise<void> => {
+    await apiClient.delete(`/courses/${id}`);
+  },
+
   submitForReview: async (id: string, txHash?: string): Promise<Course> => {
     const { data } = await apiClient.post<ApiResponse<Course>>(
       `/courses/${id}/submit`, { txHash },
