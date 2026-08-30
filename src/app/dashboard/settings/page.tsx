@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { Bell, Shield, Save, Loader2, Zap } from 'lucide-react';
 import { Breadcrumb } from '@/components/ui';
-import { useReducedMotion } from '@/lib/hooks/use-reduced-motion';
+import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup';
+import { twoFactorApi } from '@/lib/api/services';
 
 export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [loadingTwoFactor, setLoadingTwoFactor] = useState(false);
 
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [courseUpdates, setCourseUpdates] = useState(true);
@@ -18,8 +21,18 @@ export default function SettingsPage() {
   const [localReducedMotion, setLocalReducedMotion] = useState(false);
 
   useEffect(() => {
-    // No dedicated settings endpoints found in current client services.
-    // Keep this page functional as UI scaffold.
+    // Load 2FA status
+    const loadTwoFactorStatus = async () => {
+      try {
+        const status = await twoFactorApi.getStatus();
+        setTwoFactorEnabled(status.enabled);
+      } catch (err) {
+        // If 2FA endpoint doesn't exist yet, assume disabled
+        setTwoFactorEnabled(false);
+      }
+    };
+
+    loadTwoFactorStatus();
     setLoaded(true);
   }, []);
 
@@ -151,41 +164,30 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      {/* Accessibility Section */}
+      {/* Two-Factor Authentication Section */}
       <section className="card p-6 mt-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-saffron-600" />
-          <h2 className="font-semibold text-ink-900">Accessibility</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-saffron-600" />
+            <h2 className="text-lg font-semibold text-ink-900">Two-Factor Authentication</h2>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+            twoFactorEnabled
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-amber-100 text-amber-700'
+          }`}>
+            {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+          </span>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localReducedMotion}
-                onChange={(e) => handleReducedMotionChange(e.target.checked)}
-                className="mt-1"
-              />
-              <span>
-                <p className="text-sm font-medium text-ink-900">Reduce motion</p>
-                <p className="text-xs text-ink-500">
-                  Disable animations and transitions to reduce motion sickness or vestibular disorder symptoms.
-                  {hasManualOverride && (
-                    <span className="block mt-1 text-saffron-600 font-medium">
-                      ✓ Manual override active
-                    </span>
-                  )}
-                </p>
-              </span>
-            </label>
-          </div>
-
-          <div className="rounded-xl border border-leaf-100 bg-leaf-50 p-3">
-            <p className="text-xs text-leaf-700">
-              <strong>Motion preferences:</strong> This setting respects your operating system's "Reduce motion" preference. You can also override it manually here. Changes take effect immediately.
-            </p>
-          </div>
+        <div className="bg-ink-50 p-4 rounded-lg">
+          {loadingTwoFactor ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-saffron-500 animate-spin" />
+            </div>
+          ) : (
+            <TwoFactorSetup />
+          )}
         </div>
       </section>
 
