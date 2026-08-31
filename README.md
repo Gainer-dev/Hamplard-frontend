@@ -70,6 +70,63 @@ Install [Freighter](https://freighter.app) and switch it to Testnet.
 
 ---
 
+## Testing
+
+### Unit & Component Tests (Vitest)
+
+```bash
+npm run test
+```
+
+### End-to-End Tests (Playwright)
+
+Run all E2E tests across Chromium, Firefox, and WebKit:
+
+```bash
+npm run test:e2e
+```
+
+Open the Playwright UI for interactive test authoring and debugging:
+
+```bash
+npm run test:e2e:ui
+```
+
+### Visual Regression Tests
+
+Visual regression tests use Playwright's `toHaveScreenshot` to catch accidental layout changes on the homepage and course detail page. Baseline screenshots are stored in `e2e/screenshots/`.
+
+#### Run visual tests only
+
+```bash
+npx playwright test --project=visual
+```
+
+This runs tests tagged with `@visual` across three viewports:
+- **Mobile**: 375px × 667px
+- **Tablet**: 768px × 1024px
+- **Desktop**: 1280px × 800px
+
+#### Update baseline screenshots
+
+After making intentional UI changes, regenerate and commit the new baselines:
+
+```bash
+npx playwright test --update-snapshots
+```
+
+Then commit the updated files in `e2e/screenshots/` to the repository.
+
+> **Note:** Baseline screenshots must be committed to the repo before CI can pass. Run `--update-snapshots` locally on the same OS/architecture used by CI (Ubuntu Linux) to avoid platform-specific rendering differences.
+
+#### CI Integration
+
+Visual regression tests run automatically in GitHub Actions on every push and pull request. If a visual diff is detected, the CI job will fail and upload:
+- The Playwright HTML report (with side-by-side diffs)
+- Test traces for debugging
+
+---
+
 ## License
 
 MIT
