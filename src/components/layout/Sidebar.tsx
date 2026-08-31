@@ -52,7 +52,7 @@ export function Sidebar() {
   const nav = isInstructor ? INSTRUCTOR_NAV : STUDENT_NAV;
 
   return (
-    <aside className="w-60 bg-white border-r border-ink-100 flex flex-col flex-shrink-0">
+    <aside className="hidden w-60 flex-shrink-0 flex-col border-r border-ink-100 bg-white lg:flex">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-ink-100">
         <Link href="/" className="font-display text-xl font-semibold text-ink-900">
