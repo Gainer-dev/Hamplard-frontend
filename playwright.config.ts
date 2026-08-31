@@ -40,7 +40,9 @@ export default defineConfig({
 
   webServer: {
     command: 'npm run dev -- --port 3001',
-    url: 'http://localhost:3001',
+    // The home page depends on live SEO data, so use a stable route as the
+    // readiness probe for the local E2E server.
+    url: 'http://localhost:3001/login',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
