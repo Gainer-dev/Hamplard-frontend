@@ -192,7 +192,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ── Next-steps sidebar (sits below form on this column on lg) ── */}
+         
           <div className="card p-6 mt-5">
             <p className="text-sm font-semibold text-ink-900">Next steps</p>
             <p className="text-sm text-ink-500 mt-1">
